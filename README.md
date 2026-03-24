@@ -1,5 +1,5 @@
 # agent-provost
-A runtime and audit ledger for autonomous AI. Decouples agent logic via a mandatory Registration Gate, runs entirely on OpenResty/Lua, and provides boundary control, real-time intent-action logs, and an automated kill-switch to govern LLM agent workloads. Move from agentic anarchy to a tamper-proof system of record. AGPL-3.0.
+A runtime and audit ledger for autonomous AI. Decouples agent logic via a mandatory Registration Gate, runs entirely on OpenResty/Lua, and provides boundary control and real-time intent-action logs for LLM agent workloads. Move from agentic anarchy to a tamper-proof system of record. And it does much more. AGPL-3.0.
 
 ## Architecture
 - **OpenResty proxy layer** sits at `agent-proxy` and funnels agent RPC traffic through Lua filters that capture request/response bodies, add structured metadata, and enforce timeouts. This keeps _agent intent_ observable while keeping the downstream MCP server untouched.
