@@ -1,0 +1,55 @@
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+nginx-logs/
+debug.log*
+# Lua
+*.luac
+luac.out
+lua_modules/
+*.rock
+*.rocks
+*.rockspec
+
+# Python
+*.py[cod]
+*$py.class
+__pycache__/
+env/
+venv/
+.venv/
+ENV/
+.python-version
+.coverage
+coverage.xml
+coverage-html/
+htmlcov/
+pip-wheel-metadata/
+build/
+dist/
+*.egg-info/
+*.egg
+.pytest_cache/
+mypy_cache/
+.pyre/
+.pytype/
+
+# IDE/editor
+.idea/
+.vscode/
+*.iml
+*.code-workspace
+
+# Environment
+.env
+local_settings.py
+
+# Package managers
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

@@ -1,0 +1,48 @@
+# Ignore git metadata and local config
+.git
+.github
+.gitignore
+.dockerignore
+
+# Logs and caches
+logs/
+nginx-logs/
+*.log
+*.log*
+
+# Lua
+*.luac
+luac.out
+lua_modules/
+*.rock
+*.rocks
+*.rockspec
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+pip-wheel-metadata/
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Environment
+env/
+venv/
+.venv/
+ENV/
+.env
+.python-version
+
+# Editor/IDE
+.idea/
+.vscode/
+*.iml
+.code-workspace
+
+# Package managers
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
