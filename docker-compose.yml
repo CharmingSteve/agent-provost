@@ -2,50 +2,18 @@ services:
   alpaca-mcp:
     image: python:3.11-slim
     container_name: alpaca-mcp
-    command:
-      - /bin/sh
-      - -lc
-      - |
-        set -e
-        pip install --no-cache-dir uv
-        uv tool install --force --from alpaca-mcp-server alpaca-mcp-server
-        python - <<'PY'
-        import glob
-        from pathlib import Path
-
-        candidates = glob.glob("/root/.local/share/uv/tools/alpaca-mcp-server/lib/python*/site-packages/alpaca_mcp_server/server.py")
-        if not candidates:
-          raise SystemExit("alpaca_mcp_server/server.py not found")
-
-        server_py = Path(candidates[0])
-        content = server_py.read_text()
-
-        replacements = {
-          "trade_client = TradingClientSigned(TRADE_API_KEY, TRADE_API_SECRET, paper=ALPACA_PAPER_TRADE_BOOL)": "trade_client = TradingClientSigned(TRADE_API_KEY, TRADE_API_SECRET, paper=ALPACA_PAPER_TRADE_BOOL, url_override=TRADE_API_URL)",
-          "stock_historical_data_client = StockHistoricalDataClientSigned(TRADE_API_KEY, TRADE_API_SECRET)": "stock_historical_data_client = StockHistoricalDataClientSigned(TRADE_API_KEY, TRADE_API_SECRET, url_override=DATA_API_URL)",
-          "option_historical_data_client = OptionHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)": "option_historical_data_client = OptionHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET, url_override=DATA_API_URL)",
-          "corporate_actions_client = CorporateActionsClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)": "corporate_actions_client = CorporateActionsClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET, url_override=DATA_API_URL)",
-          "crypto_historical_data_client = CryptoHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)": "crypto_historical_data_client = CryptoHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET, url_override=DATA_API_URL)",
-        }
-
-        updated = content
-        for old, new in replacements.items():
-          updated = updated.replace(old, new)
-
-        if updated == content:
-          raise SystemExit("startup patch did not apply; expected client initialization lines were not found")
-
-        server_py.write_text(updated)
-        print(f"patched {server_py}")
-        PY
-        exec /root/.local/bin/alpaca-mcp-server serve --transport streamable-http --host 0.0.0.0 --port 8088 --allowed-hosts "localhost,agent-provost"
+    command: ["/bin/sh", "/setup/entrypoint.sh"]
     env_file:
       - .env
     environment:
-      TRADE_API_URL: http://agent-provost:8081/trading
-      DATA_API_URL: http://agent-provost:8081/data
+      # Route Alpaca API calls through the proxy for full two-hop logging.
+      # DATA_API_URL is read natively by v2; TRADE_API_URL requires the patch in entrypoint.sh.
+      TRADE_API_URL: "http://agent-provost:8081/trading"
+      DATA_API_URL: "http://agent-provost:8081/data"
     expose:
       - "8088"
+    volumes:
+      - ./entrypoint.sh:/setup/entrypoint.sh:ro
     networks:
       - mcp_internal
       - proxy_egress
