@@ -1,39 +1,32 @@
 #!/bin/sh
-# Stable entrypoint for alpaca-mcp container.
-# Pinned version + TRADE_API_URL patch + streamable-http transport.
-
 set -e
 
-# ── 1. Install pinned version ────────────────────────────────────────────────
-echo "[entrypoint] Installing alpaca-mcp-server==2.0.0 ..."
-pip install --no-cache-dir "alpaca-mcp-server==2.0.0"
+echo "[entrypoint] Patching TRADE_API_URL support into server.py..."
+SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+SERVER_PY="$SITE_PACKAGES/alpaca_mcp_server/server.py"
 
-# ── 2. Patch _get_trading_base_url to honour TRADE_API_URL env var ───────────
-# v2 natively reads DATA_API_URL, but NOT TRADE_API_URL.
-# This patch adds the override without touching anything else.
-echo "[entrypoint] Applying TRADE_API_URL patch ..."
-python3 - <<'PATCHEOF'
-import pathlib
-
-p = pathlib.Path('/usr/local/lib/python3.11/site-packages/alpaca_mcp_server/server.py')
-src = p.read_text()
-
-if 'TRADE_API_URL' not in src:
-    injection = (
-        '    trade_url = os.environ.get("TRADE_API_URL", "").rstrip("/")\n'
-        '    if trade_url:\n'
-        '        return trade_url\n'
-    )
-    src = src.replace(
-        'def _get_trading_base_url() -> str:\n',
-        'def _get_trading_base_url() -> str:\n' + injection,
-    )
-    p.write_text(src)
-    print("[entrypoint] Patch applied: TRADE_API_URL override added.")
+python - "$SERVER_PY" <<'PYEOF'
+import re
+import sys
+path = sys.argv[1]
+src = open(path).read()
+pattern = r"def _get_trading_base_url\(\) -> str:\n(?:    .*\n){1,6}"
+new_block = (
+    "def _get_trading_base_url() -> str:\n"
+    "    forced = os.environ.get(\"TRADE_API_URL\")\n"
+    "    if forced:\n"
+    "        return forced.rstrip(\"/\")\n"
+    "    paper = os.environ.get(\"ALPACA_PAPER_TRADE\", \"true\").lower() in (\"true\", \"1\", \"yes\")\n"
+    "    return TRADING_API_BASE_URLS[\"paper\" if paper else \"live\"]\n"
+)
+patched, count = re.subn(pattern, new_block, src, count=1)
+if count == 1:
+    open(path, "w").write(patched)
+    print("[patch] TRADE_API_URL override patch applied.")
 else:
-    print("[entrypoint] Patch already present, skipping.")
-PATCHEOF
+    print("[patch] Trading base URL function not found — skipping.")
+PYEOF
 
-# ── 3. Start with streamable-http transport (/mcp endpoint) ─────────────────
-echo "[entrypoint] Starting alpaca-mcp-server (streamable-http, port 8088) ..."
+echo "[entrypoint] Starting MCP Server with streamable-http transport..."
 exec alpaca-mcp-server --transport streamable-http --host 0.0.0.0 --port 8088
+

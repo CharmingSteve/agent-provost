@@ -1,22 +1,22 @@
 services:
   alpaca-mcp:
-    image: python:3.11-slim
+    build:
+      context: .
+      dockerfile: alpaca-mcp.Dockerfile
     container_name: alpaca-mcp
-    command: ["/bin/sh", "/setup/entrypoint.sh"]
+    volumes:
+      - ./entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     env_file:
       - .env
     environment:
-      # Route Alpaca API calls through the proxy for full two-hop logging.
-      # DATA_API_URL is read natively by v2; TRADE_API_URL requires the patch in entrypoint.sh.
       TRADE_API_URL: "http://agent-provost:8081/trading"
       DATA_API_URL: "http://agent-provost:8081/data"
+      BROKER_API_URL: "http://agent-provost:8081/broker"
     expose:
       - "8088"
-    volumes:
-      - ./entrypoint.sh:/setup/entrypoint.sh:ro
     networks:
       - mcp_internal
-      - proxy_egress
     restart: unless-stopped
 
   agent-provost:
