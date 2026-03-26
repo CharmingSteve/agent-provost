@@ -12,6 +12,7 @@ path = sys.argv[1]
 src = open(path).read()
 pattern = r"def _get_trading_base_url\(\) -> str:\n(?:    .*\n){1,6}"
 new_block = (
+    "import os\n"
     "def _get_trading_base_url() -> str:\n"
     "    forced = os.environ.get(\"TRADE_API_URL\")\n"
     "    if forced:\n"
