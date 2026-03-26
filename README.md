@@ -1,84 +1,123 @@
 # agent-provost
-A mandatory man-in-the-middle (MITM) control plane for AI agents. Every inbound request and outbound upstream call is forced through OpenResty/Lua and logged with bodies + headers for auditability. AGPL-3.0.
 
-## What This Is
-`agent-provost` is not a passive logger. It is an active inline boundary:
+Agent Provost is a mandatory MITM boundary for AI trading flows. It places OpenResty between the client and MCP server, and between the MCP server and Alpaca, so both hops are observable in logs.
 
-- Hop 1: LLM client -> MCP server (reverse proxy on port `8000`)
-- Hop 2: MCP server -> Alpaca APIs (forward/egress proxy on port `8081`)
+## Architecture
 
-Because both hops are proxied, both directions are observable and recorded.
+Two-hop flow:
 
-## Logging Guarantee
-All major traffic surfaces are captured in JSON logs under `./nginx-logs/`:
+1. Hop 1: LLM client -> Agent Provost (port 8000) -> MCP server
+2. Hop 2: MCP server -> Agent Provost (port 8081) -> Alpaca APIs
 
-- `llm_to_alpaca_access.log`
-- `llm_to_alpaca_error.log`
-- `mcp_to_alpaca_access.log`
-- `mcp_to_alpaca_error.log`
+Public entrypoint:
 
-The access logs include:
+- host port 8088 maps to proxy port 8000
 
-- request and response bodies
-- truncation flags for oversized payloads
-- request/response metadata (status, upstream timings, method, URI)
-- selected request/response headers (including auth/header fields as seen by the proxy)
+Internal outbound routing from MCP is configured to proxy prefixes:
 
-## Log Coverage Summary
-The current Alpaca proxy logging is intentionally broader than the original Sefaria baseline used in this project.
+- trading: http://agent-provost:8081/trading
+- data: http://agent-provost:8081/data
+- broker: http://agent-provost:8081/broker
 
-Per access-log entry, you capture all of the following categories at once:
+## What Gets Logged
 
-- Identity and transport: timestamp, server socket, client IP/port, request ID, connection counters, protocol.
-- HTTP request envelope: method, host, URI, query args, request length, content type/length.
-- HTTP response envelope: status, bytes sent, body bytes sent, request_time.
-- Upstream timing and target: upstream_addr, upstream_status, connect/header/response timings, upstream response length.
-- Full request payload visibility: `request_body` plus `request_body_truncated`.
-- Full response payload visibility: `response_body` plus `response_body_truncated`.
-- Inbound headers: user-agent, authorization, accept headers, forwarded headers, cookies, origin.
-- Outbound/sent headers: sent content-type/length/cache metadata and related response headers.
-- Upstream response headers: upstream content-type/length/date/server and cache-related headers.
+Logs live in ./nginx-logs:
 
-This means each log line is a full transaction record, not just an access summary.
+- llm_to_alpaca_access.log
+- llm_to_alpaca_error.log
+- mcp_to_alpaca_access.log
+- mcp_to_alpaca_error.log
 
-Compared to the original Sefaria setup, this version adds stronger body observability controls (explicit body truncation flags) while preserving two-hop visibility (`llm_to_alpaca_*` and `mcp_to_alpaca_*`).
+Both access logs use the same JSON schema:
 
-## End-Of-File Graph Log Examples
-Two concrete examples from the tail region of the access logs show full graph-shaped tool payloads (request + response + structured content) captured in single JSON transactions:
+- time_local
+- remote_addr
+- request
+- status
+- body_bytes_sent
+- request_time
+- upstream_response_time
+- request_body
+- resp_body
 
-- `nginx-logs/llm_to_alpaca_access.log`, line 24:
-	`tools/call` for `get_stock_bars` with multi-symbol arguments in `request_body`, plus graph payload in `response_body` and `structuredContent` (`counts`, `per_symbol`, and bars data).
-- `nginx-logs/mcp_to_alpaca_access.log`, line 22:
-	Matching `get_stock_bars` transaction on the second hop, again including full request arguments and graph response structure (`tool`, `request`, `counts`, and per-symbol bar records).
+This means each recorded request includes request and response payload text as seen at that hop.
 
-These examples demonstrate that the same graph transaction is visible on both MITM hops, which is the core auditability requirement.
+## Four-Step Compliance Model
 
-## Proof In Config (line citations)
-The behavior above is directly implemented in `default.conf`:
+If you want full traceability, these four events should be visible across the two access logs:
 
-- Request body capture enabled globally: line 13 (`lua_need_request_body on;`)
-- JSON log format declaration: line 16 (`log_format json_full`)
-- Request/response bodies in log schema: lines 41-44 (`request_body`, `response_body`, truncation flags)
-- Header fields in log schema (example: authorization): line 49 (`http_authorization`)
-- Inbound MITM hop listener (LLM -> MCP): line 123 (`listen 8000;`)
-- Inbound access log destination: line 130 (`llm_to_alpaca_access.log`)
-- Inbound request body Lua capture: line 134 (`access_by_lua_block`)
-- Inbound response body Lua capture: line 212 (`body_filter_by_lua_block`)
-- Egress MITM hop listener (MCP -> Alpaca): line 245 (`listen 8081;`)
-- Egress access log destination: line 252 (`mcp_to_alpaca_access.log`)
-- Egress upstream routing examples:
-	- line 256 (`proxy_pass https://alpaca_trading_api/`)
-	- line 307 (`proxy_pass https://alpaca_data_api/`)
-	- line 358 (`proxy_pass https://alpaca_broker_api/`)
-- Egress body capture blocks:
-	- response capture lines 258, 309, 360 (`body_filter_by_lua_block`)
-	- request capture lines 278, 329, 380 (`access_by_lua_block`)
+1. LLM -> proxy request to MCP
+2. MCP -> proxy request to Alpaca
+3. Alpaca -> proxy response to MCP
+4. Proxy -> LLM response from MCP
+
+How they map:
+
+- llm_to_alpaca_access.log: steps 1 and 4
+- mcp_to_alpaca_access.log: steps 2 and 3
+
+A healthy outbound tool call (for example get_stock_snapshot SPY) should show:
+
+- llm_to_alpaca_access.log line for tools/call
+- mcp_to_alpaca_access.log line for upstream API call such as GET /data/v2/stocks/snapshots?symbols=SPY
+
+## What You Will See In Practice
+
+After startup with no traffic:
+
+- access logs may stay unchanged
+- error logs may be empty
+
+After one outbound MCP tool call:
+
+- llm_to_alpaca_access.log should add entries for initialize, notifications/initialized, and tools/call
+- mcp_to_alpaca_access.log should add at least one entry for the real Alpaca endpoint hit by that tool
+
+If mcp_to_alpaca_access.log does not move while tools/call succeeds, outbound traffic is bypassing hop 2 and the setup is not compliant.
+
+## Built-In Verification
+
+Preferred way to run and verify the full stack from repo root:
+
+- sh agent-provost/verify_proxy_routing.sh
+
+The script:
+
+1. Recreates the entire compose stack (`docker compose up -d --force-recreate`)
+2. Truncates all four log files to zero before probing
+3. Runs initialize + get_account_info through localhost:8088/mcp
+4. Fails unless:
+   - hop 1 access log has fresh lines
+   - hop 2 access log has fresh lines
+   - hop 2 error log is empty
+
+Log side effects are intentional:
+
+- `llm_to_alpaca_access.log` is truncated
+- `mcp_to_alpaca_access.log` is truncated
+- `llm_to_alpaca_error.log` is truncated
+- `mcp_to_alpaca_error.log` is truncated
+
+If you need to preserve existing logs, copy them out before running the script.
 
 ## Running
-1. From repo root, start the stack with Docker Compose for this directory.
-2. Point your MCP client at `localhost:8088` (container maps host `8088` -> proxy `8000`).
-3. Inspect logs in `./agent-provost/nginx-logs`.
 
-## Notes
-- Large payloads are truncated in logs to cap memory/size (`*_truncated` fields indicate this).
-- If traffic bypasses this proxy, it will not be logged; keep clients and MCP egress pointed at this boundary.
+Recommended:
+
+- from repo root: `sh agent-provost/verify_proxy_routing.sh`
+
+This command both starts/recreates compose and proves end-to-end two-hop logging is active.
+
+Manual alternative:
+
+- from `agent-provost` directory: `docker compose up -d --force-recreate`
+
+Then point MCP clients to:
+
+- http://localhost:8088/mcp
+
+## Important Notes
+
+- This README describes current behavior of the active config files in this repo.
+- If clients call MCP directly (or MCP calls Alpaca directly), those paths will not be represented in both hop logs.
+- Error logs are expected to be empty during normal operation and will populate only when proxy/upstream errors occur.
