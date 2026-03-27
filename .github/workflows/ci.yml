@@ -105,16 +105,33 @@ jobs:
 
   # ── Trivy filesystem scan ──────────────────────────────────────────────────
   security-trivy:
-    name: Trivy (filesystem / config scan)
+    name: Trivy (filesystem / image scan)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare CI env file for compose parsing
+        run: |
+          printf 'ALPACA_API_KEY=dummy\nALPACA_SECRET_KEY=dummy\nALPACA_PAPER_TRADE=true\n' > .env
+      - name: Validate docker compose spec
+        run: docker compose -f docker-compose.yml config --quiet
       - name: Install Trivy
         run: |
           curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sudo sh -s -- -b /usr/local/bin
       - name: Trivy filesystem scan
         run: trivy fs --exit-code 1 --severity CRITICAL,HIGH .
+      - name: Pull and build images for scan
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yml pull agent-provost
+          docker compose -f docker-compose.yml build alpaca-mcp
+      - name: Trivy image scan (agent-provost)
+        run: trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:16527c6c0a8119dc948933718bf2e4a5366bc62b5b3cd72881999852ceaea94c
+      - name: Trivy image scan (alpaca-mcp build output)
+        run: |
+          set -euo pipefail
+          docker image inspect agent-provost-alpaca-mcp:latest >/dev/null
+          trivy image --exit-code 1 --severity CRITICAL,HIGH agent-provost-alpaca-mcp:latest
 
   # ── Checkov IaC security scan ──────────────────────────────────────────────
   security-checkov:
@@ -125,7 +142,7 @@ jobs:
       - name: Install Checkov
         run: pip install checkov
       - name: Run Checkov
-        run: checkov --directory . --framework dockerfile,docker_compose --quiet --soft-fail
+        run: checkov --directory . --framework dockerfile,github_actions,yaml --quiet
 
   # ── Secrets detection ──────────────────────────────────────────────────────
   security-gitleaks:
