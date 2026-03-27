@@ -40,5 +40,6 @@ EOF
   [ "$status" -eq 0 ]
   [ -s "$TMPDIR/nginx-logs/llm_to_alpaca_access.log" ]
   [ -s "$TMPDIR/nginx-logs/mcp_to_alpaca_access.log" ]
+  [ ! -s "$TMPDIR/nginx-logs/llm_to_alpaca_error.log" ]
   [ ! -s "$TMPDIR/nginx-logs/mcp_to_alpaca_error.log" ]
 }
