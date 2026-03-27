@@ -1,0 +1,5 @@
+# .shellcheckrc
+# SC1007: "Remove space after = if trying to assign a value"
+# Disabled globally because the `VAR= command` idiom (prefixed env-var cleared
+# for a single command) is valid POSIX sh and triggers this false-positive.
+disable=SC1007
