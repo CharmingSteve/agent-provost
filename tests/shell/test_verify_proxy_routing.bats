@@ -43,3 +43,24 @@ EOF
   [ ! -s "$TMPDIR/nginx-logs/llm_to_alpaca_error.log" ]
   [ ! -s "$TMPDIR/nginx-logs/mcp_to_alpaca_error.log" ]
 }
+
+@test "verify_proxy_routing.sh fails when probe returns a non-zero exit code" {
+  TMPDIR="$(mktemp -d)"
+  cp "$TEST_REPO_ROOT/verify_proxy_routing.sh" "$TMPDIR/verify_proxy_routing.sh"
+  mkdir -p "$TMPDIR/nginx-logs" "$TMPDIR/bin" "$TMPDIR/.venv/bin"
+
+  cat > "$TMPDIR/bin/docker" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+  chmod +x "$TMPDIR/bin/docker"
+
+  cat > "$TMPDIR/.venv/bin/python" <<'EOF'
+#!/bin/sh
+exit 1
+EOF
+  chmod +x "$TMPDIR/.venv/bin/python"
+
+  run env PATH="$TMPDIR/bin:$PATH" ROOT_DIR="$TMPDIR" PROJECT_DIR="$TMPDIR" LOG_DIR="$TMPDIR/nginx-logs" sh "$TMPDIR/verify_proxy_routing.sh"
+  [ "$status" -ne 0 ]
+}
