@@ -1,0 +1,175 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - copilot/**
+  pull_request:
+    branches:
+      - main
+
+# Restrict the default GITHUB_TOKEN to read-only; jobs that need more
+# permissions declare their own permissions block explicitly.
+permissions:
+  contents: read
+
+jobs:
+  # ── Shell linting ──────────────────────────────────────────────────────────
+  lint-shell:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+      - name: Lint shell scripts
+        run: |
+          set -euo pipefail
+          shellcheck entrypoint.sh
+          shellcheck verify_proxy_routing.sh
+
+  # ── Dockerfile linting ─────────────────────────────────────────────────────
+  lint-dockerfile:
+    name: Hadolint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: alpaca-mcp.Dockerfile
+
+  # ── Lua linting ────────────────────────────────────────────────────────────
+  lint-lua:
+    name: luacheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install luacheck
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y lua5.1 luarocks
+          sudo luarocks install luacheck
+      - name: Lint Lua test files
+        run: luacheck tests/lua/
+
+  # ── Lua unit tests ─────────────────────────────────────────────────────────
+  test-lua:
+    name: busted (Lua unit tests)
+    runs-on: ubuntu-latest
+    needs: [lint-lua]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install busted and lua-cjson
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y lua5.1 luarocks
+          sudo luarocks install busted
+          sudo luarocks install lua-cjson
+      - name: Run Lua unit tests
+        run: busted tests/lua/
+
+  # ── Shell unit tests ───────────────────────────────────────────────────────
+  test-shell:
+    name: bats (shell unit tests)
+    runs-on: ubuntu-latest
+    needs: [lint-shell]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bats
+        run: sudo apt-get install -y bats
+      - name: Run bats tests
+        run: bats tests/shell/
+
+  # ── Log schema validation ──────────────────────────────────────────────────
+  log-schema-validation:
+    name: Log schema validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate log JSON schema keys are defined in default.conf
+        run: |
+          set -euo pipefail
+          for key in time_local remote_addr request status body_bytes_sent \
+                     request_time upstream_response_time request_body resp_body; do
+            if ! grep -q "\"${key}\"" default.conf; then
+              echo "FAIL: key '${key}' missing from default.conf log format"
+              exit 1
+            fi
+          done
+          echo "PASS: all required log keys found in default.conf"
+
+  # ── Trivy filesystem scan ──────────────────────────────────────────────────
+  security-trivy:
+    name: Trivy (filesystem / config scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          trivyignores: .trivyignore
+
+  # ── Checkov IaC security scan ──────────────────────────────────────────────
+  security-checkov:
+    name: Checkov (IaC security)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: dockerfile,docker_compose
+          quiet: true
+          soft_fail: true
+
+  # ── Secrets detection ──────────────────────────────────────────────────────
+  security-gitleaks:
+    name: Gitleaks (secrets detection)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # upload SARIF findings to GitHub Security tab
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Integration tests (requires Alpaca credentials) ────────────────────────
+  integration-tests:
+    name: Integration tests (end-to-end)
+    runs-on: ubuntu-latest
+    if: ${{ secrets.ALPACA_API_KEY != '' && secrets.ALPACA_SECRET_KEY != '' }}
+    needs: [test-lua, test-shell, log-schema-validation]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq
+        run: sudo apt-get install -y jq
+      - name: Prepare env
+        run: |
+          cat > .env <<EOF
+          ALPACA_API_KEY=${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY=${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_PAPER_TRADE=true
+          EOF
+      - name: Run Integration Tests
+        run: ./verify_proxy_routing.sh
+      - name: Validate nginx config in running container
+        run: docker exec agent-provost nginx -t
+      - name: Validate access log JSON schema
+        run: |
+          set -euo pipefail
+          for log in nginx-logs/llm_to_alpaca_access.log nginx-logs/mcp_to_alpaca_access.log; do
+            jq -e 'has("time_local") and has("remote_addr") and has("request") and
+                   has("status") and has("body_bytes_sent") and has("request_time") and
+                   has("upstream_response_time") and has("request_body") and
+                   has("resp_body")' "${log}"
+          done

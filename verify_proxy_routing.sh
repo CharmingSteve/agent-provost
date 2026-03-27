@@ -1,14 +1,16 @@
 #!/bin/sh
 set -e
 
-ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$ROOT_DIR")"
-LOG_DIR="$ROOT_DIR/nginx-logs"
+ROOT_DIR="${ROOT_DIR:-$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)}"
+PROJECT_DIR="${PROJECT_DIR:-$(dirname "$ROOT_DIR")}"
+LOG_DIR="${LOG_DIR:-$ROOT_DIR/nginx-logs}"
+DOCKER_BIN="${DOCKER_BIN:-docker}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_DIR/.venv/bin/python}"
 
 cd "$ROOT_DIR"
 
 echo "[verify] restarting stack"
-docker compose up -d --force-recreate >/dev/null
+"$DOCKER_BIN" compose up -d --force-recreate >/dev/null
 
 echo "[verify] clearing logs"
 : > "$LOG_DIR/llm_to_alpaca_access.log"
@@ -17,7 +19,7 @@ echo "[verify] clearing logs"
 : > "$LOG_DIR/mcp_to_alpaca_error.log"
 
 echo "[verify] probing mcp endpoint"
-"$PROJECT_DIR/.venv/bin/python" - <<'PY'
+"$PYTHON_BIN" - <<'PY'
 import json
 import time
 import requests
