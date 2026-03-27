@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - copilot/**
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint-lua:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4 luarocks
+          sudo luarocks install luacheck
+          sudo luarocks install busted
+          sudo luarocks install lua-cjson
+      - name: Lint Lua
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src = Path("default.conf").read_text()
+          chunks = []
+          for marker in ("access_by_lua_block", "body_filter_by_lua_block"):
+              start = 0
+              while True:
+                  idx = src.find(marker, start)
+                  if idx == -1:
+                      break
+                  brace = src.find("{", idx)
+                  depth = 0
+                  i = brace
+                  while i < len(src):
+                      if src[i] == "{":
+                          depth += 1
+                      elif src[i] == "}":
+                          depth -= 1
+                          if depth == 0:
+                              body = src[brace + 1:i].strip()
+                              chunks.append(body)
+                              start = i + 1
+                              break
+                      i += 1
+                  else:
+                      raise SystemExit("unbalanced braces while extracting lua blocks")
+          Path("/tmp/default_conf_lua_blocks.lua").write_text("\n\n".join(chunks) + "\n")
+          PY
+          luacheck /tmp/default_conf_lua_blocks.lua
+          luacheck ./tests/lua/
+      - name: Run Lua tests
+        run: busted tests/lua
+
+  lint-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ShellCheck and bats
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck bats
+      - name: Lint Shell scripts
+        run: |
+          shellcheck entrypoint.sh
+          shellcheck verify_proxy_routing.sh
+      - name: Run Shell tests
+        run: bats tests/shell
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.ALPACA_API_KEY != '' && secrets.ALPACA_SECRET_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+      - name: Prepare env
+        run: |
+          cat > .env <<EOF
+          ALPACA_API_KEY=${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY=${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_PAPER_TRADE=true
+          EOF
+      - name: Run Integration Tests
+        run: ./verify_proxy_routing.sh
+      - name: Validate nginx config in running container
+        run: docker exec agent-provost nginx -t
+      - name: Validate access log JSON schema
+        run: |
+          jq -e 'has("time_local") and has("remote_addr") and has("request") and has("status") and has("body_bytes_sent") and has("request_time") and has("upstream_response_time") and has("request_body") and has("resp_body")' nginx-logs/llm_to_alpaca_access.log
+          jq -e 'has("time_local") and has("remote_addr") and has("request") and has("status") and has("body_bytes_sent") and has("request_time") and has("upstream_response_time") and has("request_body") and has("resp_body")' nginx-logs/mcp_to_alpaca_access.log
+
+  docker-security:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.ALPACA_API_KEY != '' && secrets.ALPACA_SECRET_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Hadolint and Trivy
+        run: |
+          sudo wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64
+          sudo chmod +x /usr/local/bin/hadolint
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+      - name: Lint Dockerfile
+        run: hadolint alpaca-mcp.Dockerfile
+      - name: Prepare env
+        run: |
+          cat > .env <<EOF
+          ALPACA_API_KEY=${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY=${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_PAPER_TRADE=true
+          EOF
+      - name: Build and Scan Docker Images
+        run: |
+          docker build -f alpaca-mcp.Dockerfile -t agent-provost .
+          trivy image python:3.11-slim
+          trivy image agent-provost
+
+  security-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install security scanners
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install checkov bandit
+          curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh | sh -s -- -b /usr/local/bin
+          curl -sSfL https://raw.githubusercontent.com/google/osv-scanner/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+      - name: Run Checkov and Bandit
+        run: |
+          checkov --directory . --compact
+          bandit -r .
+      - name: Run Gitleaks
+        run: gitleaks detect
+      - name: Run OSV Scanner
+        run: osv-scanner --path ./
