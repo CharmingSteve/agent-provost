@@ -143,23 +143,42 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # ── Credentials gate (sets output used by integration-tests) ─────────────────
+  check-credentials:
+    name: Check Alpaca credentials
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.gate.outputs.enabled }}
+    steps:
+      - id: gate
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: |
+          if [ -n "$ALPACA_API_KEY" ] && [ -n "$ALPACA_SECRET_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # ── Integration tests (requires Alpaca credentials) ────────────────────────
   integration-tests:
     name: Integration tests (end-to-end)
     runs-on: ubuntu-latest
-    if: ${{ secrets.ALPACA_API_KEY != '' && secrets.ALPACA_SECRET_KEY != '' }}
-    needs: [test-lua, test-shell, log-schema-validation]
+    needs: [check-credentials, test-lua, test-shell, log-schema-validation]
+    if: ${{ needs.check-credentials.outputs.enabled == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - name: Install jq
         run: sudo apt-get install -y jq
       - name: Prepare env
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
         run: |
-          cat > .env <<EOF
-          ALPACA_API_KEY=${{ secrets.ALPACA_API_KEY }}
-          ALPACA_SECRET_KEY=${{ secrets.ALPACA_SECRET_KEY }}
-          ALPACA_PAPER_TRADE=true
-          EOF
+          set -euo pipefail
+          printf 'ALPACA_API_KEY=%s\nALPACA_SECRET_KEY=%s\nALPACA_PAPER_TRADE=true\n' \
+            "$ALPACA_API_KEY" "$ALPACA_SECRET_KEY" > .env
       - name: Run Integration Tests
         run: ./verify_proxy_routing.sh
       - name: Validate nginx config in running container
