@@ -1,0 +1,211 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - copilot/**
+  pull_request:
+    branches:
+      - main
+
+# Restrict the default GITHUB_TOKEN to read-only; jobs that need more
+# permissions declare their own permissions block explicitly.
+permissions:
+  contents: read
+
+jobs:
+  # ── Shell linting ──────────────────────────────────────────────────────────
+  lint-shell:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+      - name: Lint shell scripts
+        run: |
+          set -euo pipefail
+          shellcheck entrypoint.sh
+          shellcheck verify_proxy_routing.sh
+
+  # ── Dockerfile linting ─────────────────────────────────────────────────────
+  lint-dockerfile:
+    name: Hadolint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Hadolint
+        run: |
+          sudo wget -qO /usr/local/bin/hadolint \
+            https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          sudo chmod +x /usr/local/bin/hadolint
+      - name: Lint Dockerfile
+        run: hadolint alpaca-mcp.Dockerfile
+
+  # ── Lua linting ────────────────────────────────────────────────────────────
+  lint-lua:
+    name: luacheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install luacheck
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y lua5.1 luarocks
+          sudo luarocks install luacheck
+      - name: Lint Lua test files
+        run: luacheck tests/lua/
+
+  # ── Lua unit tests ─────────────────────────────────────────────────────────
+  test-lua:
+    name: busted (Lua unit tests)
+    runs-on: ubuntu-latest
+    needs: [lint-lua]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install busted and lua-cjson
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y lua5.1 luarocks
+          sudo luarocks install busted
+          sudo luarocks install lua-cjson
+      - name: Run Lua unit tests
+        run: busted tests/lua/
+
+  # ── Shell unit tests ───────────────────────────────────────────────────────
+  test-shell:
+    name: bats (shell unit tests)
+    runs-on: ubuntu-latest
+    needs: [lint-shell]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bats
+        run: sudo apt-get install -y bats
+      - name: Run bats tests
+        run: bats tests/shell/
+
+  # ── Log schema validation ──────────────────────────────────────────────────
+  log-schema-validation:
+    name: Log schema validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate log JSON schema keys are defined in default.conf
+        run: |
+          set -euo pipefail
+          for key in time_local remote_addr request status body_bytes_sent \
+                     request_time upstream_response_time request_body resp_body; do
+            if ! grep -q "\"${key}\"" default.conf; then
+              echo "FAIL: key '${key}' missing from default.conf log format"
+              exit 1
+            fi
+          done
+          echo "PASS: all required log keys found in default.conf"
+
+  # ── Trivy filesystem scan ──────────────────────────────────────────────────
+  security-trivy:
+    name: Trivy (filesystem / image scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare CI env file for compose parsing
+        run: |
+          printf 'ALPACA_API_KEY=dummy\nALPACA_SECRET_KEY=dummy\nALPACA_PAPER_TRADE=true\n' > .env
+      - name: Validate docker compose spec
+        run: docker compose -f docker-compose.yml config --quiet
+      - name: Install Trivy
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+      - name: Trivy filesystem scan
+        run: trivy fs --exit-code 1 --severity CRITICAL,HIGH .
+      - name: Pull and build images for scan
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yml pull agent-provost
+          docker compose -f docker-compose.yml build alpaca-mcp
+      - name: Trivy image scan (agent-provost)
+        run: trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:16527c6c0a8119dc948933718bf2e4a5366bc62b5b3cd72881999852ceaea94c
+      - name: Trivy image scan (alpaca-mcp build output)
+        run: |
+          set -euo pipefail
+          docker image inspect agent-provost-alpaca-mcp:latest >/dev/null
+          trivy image --exit-code 1 --severity CRITICAL,HIGH agent-provost-alpaca-mcp:latest
+
+  # ── Checkov IaC security scan ──────────────────────────────────────────────
+  security-checkov:
+    name: Checkov (IaC security)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Checkov
+        run: pip install checkov
+      - name: Run Checkov
+        run: checkov --directory . --framework dockerfile,github_actions,yaml --quiet
+
+  # ── Secrets detection ──────────────────────────────────────────────────────
+  security-gitleaks:
+    name: Gitleaks (secrets detection)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install Gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz \
+            | tar -xz -C /tmp
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+      - name: Run Gitleaks
+        run: gitleaks detect --source . --verbose
+
+  # ── Credentials gate (sets output used by integration-tests) ─────────────────
+  check-credentials:
+    name: Check Alpaca credentials
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.gate.outputs.enabled }}
+    steps:
+      - id: gate
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: |
+          if [ -n "$ALPACA_API_KEY" ] && [ -n "$ALPACA_SECRET_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── Integration tests (requires Alpaca credentials) ────────────────────────
+  integration-tests:
+    name: Integration tests (end-to-end)
+    runs-on: ubuntu-latest
+    needs: [check-credentials, test-lua, test-shell, log-schema-validation]
+    if: ${{ needs.check-credentials.outputs.enabled == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq
+        run: sudo apt-get install -y jq
+      - name: Prepare env
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          printf 'ALPACA_API_KEY=%s\nALPACA_SECRET_KEY=%s\nALPACA_PAPER_TRADE=true\n' \
+            "$ALPACA_API_KEY" "$ALPACA_SECRET_KEY" > .env
+      - name: Run Integration Tests
+        run: ./verify_proxy_routing.sh
+      - name: Validate nginx config in running container
+        run: docker exec agent-provost nginx -t
+      - name: Validate access log JSON schema
+        run: |
+          set -euo pipefail
+          for log in nginx-logs/llm_to_alpaca_access.log nginx-logs/mcp_to_alpaca_access.log; do
+            jq -e 'has("time_local") and has("remote_addr") and has("request") and
+                   has("status") and has("body_bytes_sent") and has("request_time") and
+                   has("upstream_response_time") and has("request_body") and
+                   has("resp_body")' "${log}"
+          done
