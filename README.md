@@ -1,13 +1,29 @@
-# agent-provost
+# Agent Provost: The Safety Firewall & Audit Ledger for Autonomous AI Trading
 
-Agent Provost is a mandatory MITM boundary for AI trading flows. It places OpenResty between the client and MCP server, and between the MCP server and Alpaca, so both hops are observable in logs.
+**Agent Provost** is a high-performance, mandatory MITM (Man-in-the-Middle) boundary designed specifically for **AI trading flows** and **Autonomous Agents**. By placing an OpenResty (Nginx + Lua) proxy between your LLM client, your **Model Context Protocol (MCP) server**, and the **Alpaca Trading API**, it ensures every single trade is observable, audited, and safety-checked.
 
-## Architecture
+Stop your AI agent from going rogue with programmable risk guardrails and a tamper-proof audit trail.
 
-Two-hop flow:
+---
 
-1. Hop 1: LLM client -> Agent Provost (port 8000) -> MCP server
-2. Hop 2: MCP server -> Agent Provost (port 8081) -> Alpaca APIs
+## 🚀 Key Features for AI Safety & Compliance
+
+*   **Programmable Circuit Breaker (Risk Kill-Switch):** Built-in Lua logic that intercepts and blocks high-risk orders. (Default: Blocks any trade quantity > 100).
+*   **Two-Hop Observability:** Full visibility into both the LLM-to-MCP and MCP-to-Alpaca communication channels.
+*   **Zero-Trust Audit Ledger:** Every request and response body is captured in structured JSON logs for forensic analysis and compliance.
+*   **Runtime Source Patching:** Unique `entrypoint.sh` technology that hot-patches the `alpaca-mcp-server` at runtime to support proxy routing without needing a custom fork.
+*   **Dockerized Deployment:** Spin up a fully compliant, two-hop trading environment in seconds with Docker Compose.
+
+---
+
+## 🏗️ Architecture: The Two-Hop Flow
+
+To guarantee full traceability, Agent Provost monitors two distinct hops:
+
+1.  **Hop 1 (Inbound):** `LLM Client` -> `Agent Provost (Port 8000)` -> `MCP Server`
+2.  **Hop 2 (Outbound):** `MCP Server` -> `Agent Provost (Port 8081)` -> `Alpaca APIs`
+
+This "Double-Proxy" setup ensures that even if the MCP server is compromised or contains bugs, the outbound calls to Wall Street are still captured and governed by your proxy rules.
 
 Public entrypoint:
 
@@ -19,30 +35,7 @@ Internal outbound routing from MCP is configured to proxy prefixes:
 - data: http://agent-provost:8081/data
 - broker: http://agent-provost:8081/broker
 
-## What Gets Logged
-
-Logs live in ./nginx-logs:
-
-- llm_to_alpaca_access.log
-- llm_to_alpaca_error.log
-- mcp_to_alpaca_access.log
-- mcp_to_alpaca_error.log
-
-Both access logs use the same JSON schema:
-
-- time_local
-- remote_addr
-- request
-- status
-- body_bytes_sent
-- request_time
-- upstream_response_time
-- request_body
-- resp_body
-
-This means each recorded request includes request and response payload text as seen at that hop.
-
-## Four-Step Compliance Model
+### Four-Step Compliance Model
 
 If you want full traceability, these four events should be visible across the two access logs:
 
@@ -53,33 +46,62 @@ If you want full traceability, these four events should be visible across the tw
 
 How they map:
 
-- llm_to_alpaca_access.log: steps 1 and 4
-- mcp_to_alpaca_access.log: steps 2 and 3
+- `llm_to_alpaca_access.log`: steps 1 and 4
+- `mcp_to_alpaca_access.log`: steps 2 and 3
 
-A healthy outbound tool call (for example get_stock_snapshot SPY) should show:
+---
 
-- llm_to_alpaca_access.log line for tools/call
-- mcp_to_alpaca_access.log line for upstream API call such as GET /data/v2/stocks/snapshots?symbols=SPY
+## 🛡️ Safety Controls & Governance
 
-## What You Will See In Practice
+Agent Provost doesn't just watch; it protects. The proxy contains an active **Circuit Breaker** inside `default.conf` that inspects JSON payloads in real-time.
 
-After startup with no traffic:
+### Current Protection:
+- **Quantity Limit:** Any `tools/call` attempting to purchase or sell more than **100 units** is immediately intercepted with a `403 Forbidden` and the error: `PROVOST_INTERVENTION: Risk Limit Exceeded`.
 
-- access logs may stay unchanged
-- error logs may be empty
+### 💡 We Need Your Ideas!
+We are expanding the safety suite. What other controls should we add?
+- [ ] Price-based slippage protection?
+- [ ] Daily Notional Value (DNV) caps?
+- [ ] Restricted ticker "Blacklists"?
+- [ ] Time-of-day trading windows?
 
-After one outbound MCP tool call:
+**[Suggest a new safety control in the Issues section!](https://github.com/CharmingSteve/agent-provost/issues)**
 
-- llm_to_alpaca_access.log should add entries for initialize, notifications/initialized, and tools/call
-- mcp_to_alpaca_access.log should add at least one entry for the real Alpaca endpoint hit by that tool
+---
 
-If mcp_to_alpaca_access.log does not move while tools/call succeeds, outbound traffic is bypassing hop 2 and the setup is not compliant.
+## 📊 The Ultimate Audit Ledger
 
-## Built-In Verification
+Logs are stored in `./nginx-logs` in a structured JSON format, making them ready for ingestion into ELK, Splunk, or custom monitoring dashboards.
 
-Preferred way to run and verify the full stack from repo root:
+Log files:
 
-- sh agent-provost/verify_proxy_routing.sh
+- `llm_to_alpaca_access.log`
+- `llm_to_alpaca_error.log`
+- `mcp_to_alpaca_access.log`
+- `mcp_to_alpaca_error.log`
+
+Each entry captures:
+- `time_local` & `remote_addr`
+- `request` (Method/Path)
+- `status` (200, 403, etc.)
+- `body_bytes_sent`, `request_time`, `upstream_response_time`
+- `request_body` (The actual JSON sent by the AI)
+- `resp_body` (The actual JSON returned by the API)
+
+---
+
+## 🛠️ Quick Start & Verification
+
+### 1. Requirements
+- Docker and Docker Compose
+- Alpaca API Keys (Paper or Live) in a `.env` file
+
+### 2. Run the Compliance Check
+Run the built-in verification script to spin up the stack, execute a test trade, and verify the logs:
+
+```bash
+sh agent-provost/verify_proxy_routing.sh
+```
 
 The script:
 
@@ -91,33 +113,30 @@ The script:
    - hop 2 access log has fresh lines
    - hop 2 error log is empty
 
-Log side effects are intentional:
+Log side effects are intentional. If you need to preserve existing logs, copy them out before running the script.
 
-- `llm_to_alpaca_access.log` is truncated
-- `mcp_to_alpaca_access.log` is truncated
-- `llm_to_alpaca_error.log` is truncated
-- `mcp_to_alpaca_error.log` is truncated
+### 3. Manual Startup
+```bash
+docker compose up -d --build
+```
 
-If you need to preserve existing logs, copy them out before running the script.
+Point your MCP clients to: `http://localhost:8088/mcp`
 
-## Running
+---
 
-Recommended:
+## 🎯 Target Use Cases
+- **AI Hedge Funds:** Ensure every trade is logged for regulatory compliance.
+- **Independent Developers:** Prevent "buggy" agent loops from draining your Alpaca account.
+- **Enterprise AI:** Maintain a "Human-in-the-Loop" style oversight via automated logs.
 
-- from repo root: `sh agent-provost/verify_proxy_routing.sh`
-
-This command both starts/recreates compose and proves end-to-end two-hop logging is active.
-
-Manual alternative:
-
-- from `agent-provost` directory: `docker compose up -d --force-recreate`
-
-Then point MCP clients to:
-
-- http://localhost:8088/mcp
+---
 
 ## Important Notes
 
 - This README describes current behavior of the active config files in this repo.
 - If clients call MCP directly (or MCP calls Alpaca directly), those paths will not be represented in both hop logs.
 - Error logs are expected to be empty during normal operation and will populate only when proxy/upstream errors occur.
+
+---
+
+*Agent Provost is an open-source project aimed at making autonomous finance safer for everyone. If you find this useful, please **Star** the repository and contribute your safety logic ideas!*
