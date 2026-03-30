@@ -17,5 +17,5 @@ RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
 USER appuser
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import sys; sys.exit(0)"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD python -c "import socket; s=socket.create_connection(('localhost', 8088), timeout=5); s.close()"
