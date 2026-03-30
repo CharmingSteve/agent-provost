@@ -26,4 +26,28 @@ def sovereign_transfer(payload: SovereignTransferRequest) -> dict:
         "status": "settled",
         "transaction_id": "TXN-9982",
         "amount_transferred": payload.amount,
+app = FastAPI(title="Mock Sovereign API", version="0.2.0")
+
+
+class TransactionRequest(BaseModel):
+    ticker: str
+    action: str
+    qty: int
+    price: float
+
+
+@app.get("/portfolio")
+def get_portfolio() -> dict:
+    return {
+        "cash": 100000.00,
+        "buying_power": 200000.00,
+        "open_positions": ["AAPL", "MSFT"],
+    }
+
+
+@app.post("/transaction")
+def post_transaction(req: TransactionRequest) -> dict:
+    return {
+        "status": "filled",
+        "notional_value": req.qty * req.price,
     }
