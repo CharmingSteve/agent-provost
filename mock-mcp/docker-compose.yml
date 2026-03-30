@@ -47,3 +47,4 @@ services:
 
 networks:
   mcp_internal:
+    internal: true

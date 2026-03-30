@@ -1,11 +1,21 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir fastapi uvicorn mcp requests
+RUN pip install --no-cache-dir \
+    fastapi==0.135.2 \
+    uvicorn==0.42.0 \
+    "mcp==1.26.0" \
+    requests==2.33.0
 
-COPY mock_api.py /app/mock_api.py
-COPY mock_mcp.py /app/mock_mcp.py
+COPY mock_api.py mock_mcp.py ./
+
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
+USER appuser
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import sys; sys.exit(0)"
