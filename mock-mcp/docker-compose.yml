@@ -2,6 +2,10 @@ services:
   sovereign-api:
     build:
       context: .
+      dockerfile: Dockerfile.api
+    image: sovereign-mock-api:latest
+    container_name: sovereign-api
+    command: uvicorn mock_api:app --host 0.0.0.0 --port 9000
       dockerfile: mock-harness.Dockerfile
     container_name: mock-sovereign-api
     command: ["uvicorn", "mock_api:app", "--host", "0.0.0.0", "--port", "9000"]
@@ -11,6 +15,18 @@ services:
       - mcp_internal
     restart: unless-stopped
 
+  nabatech-node:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    image: sovereign-mock-mcp:latest
+    container_name: nabatech-node
+    depends_on:
+      - sovereign-api
+      - agent-provost
+    environment:
+      SOVEREIGN_API_URL: "http://agent-provost:8081/sovereign"
+    command: uvicorn mock_mcp:app --host 0.0.0.0 --port 8088
   mock-mcp:
     build:
       context: .
@@ -24,6 +40,13 @@ services:
       - "8088"
     networks:
       - mcp_internal
+    restart: unless-stopped
+
+  agent-provost:
+    image: openresty/openresty:1.27.1.2-2-alpine-fat
+    container_name: sovereign-agent-provost
+    depends_on:
+      - sovereign-api
     depends_on:
       - sovereign-api
     restart: unless-stopped

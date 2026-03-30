@@ -1,0 +1,72 @@
+name: Mock MCP Sovereign CI
+
+on:
+  push:
+    paths:
+      - "mock-mcp/**"
+  pull_request:
+    paths:
+      - "mock-mcp/**"
+
+permissions:
+  contents: read
+
+jobs:
+  test-lua:
+    name: busted (mock-mcp Lua tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mock-mcp
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install lua + busted
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y lua5.1 luarocks
+          sudo luarocks install busted
+      - name: Run Lua tests
+        run: busted tests/lua/
+
+  test-shell:
+    name: bats (mock-mcp integration tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mock-mcp
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install test tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y bats jq
+      - name: Run BATS tests
+        run: bats tests/shell/test_mock_harness.bats
+
+  security:
+    name: Security checks (Trivy + pip-audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mock-mcp
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Trivy
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+      - name: Trivy filesystem scan
+        run: trivy fs --exit-code 1 --severity CRITICAL,HIGH .
+      - name: Install pip-audit
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pip-audit
+      - name: Run pip-audit on runtime dependencies
+        run: |
+          cat > requirements-ci.txt << 'EOF'
+          fastapi
+          uvicorn
+          requests
+          pydantic
+          EOF
+          pip-audit -r requirements-ci.txt
