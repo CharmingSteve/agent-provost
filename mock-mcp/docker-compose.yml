@@ -1,0 +1,50 @@
+services:
+  sovereign-api:
+    build:
+      context: .
+      dockerfile: mock-harness.Dockerfile
+    container_name: mock-sovereign-api
+    command: ["uvicorn", "mock_api:app", "--host", "0.0.0.0", "--port", "9000"]
+    expose:
+      - "9000"
+    networks:
+      - mcp_internal
+    restart: unless-stopped
+
+  mock-mcp:
+    build:
+      context: .
+      dockerfile: mock-harness.Dockerfile
+    container_name: mock-mcp
+    command: ["python", "mock_mcp.py"]
+    environment:
+      SOVEREIGN_API_URL: "http://agent-provost:8081"
+      REQUEST_TIMEOUT_SECONDS: "15"
+    expose:
+      - "8088"
+    networks:
+      - mcp_internal
+    depends_on:
+      - sovereign-api
+    restart: unless-stopped
+
+  agent-provost:
+    image: openresty/openresty@sha256:16527c6c0a8119dc948933718bf2e4a5366bc62b5b3cd72881999852ceaea94c
+    container_name: mock-agent-provost
+    depends_on:
+      - sovereign-api
+      - mock-mcp
+    ports:
+      - "18088:8000"
+    expose:
+      - "8081"
+    volumes:
+      - ./default.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      - ./nginx-logs:/data/nginx-logs
+    networks:
+      - mcp_internal
+    restart: unless-stopped
+
+networks:
+  mcp_internal:
+    internal: true

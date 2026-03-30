@@ -5,6 +5,11 @@
   [ "$status" -eq 0 ]
 }
 
+@test "mock compose pins openresty image by digest" {
+  run grep -E '^\s*image:\s*openresty/openresty@sha256:[a-f0-9]{64}$' mock-mcp/docker-compose.yml
+  [ "$status" -eq 0 ]
+}
+
 @test "alpaca-mcp.Dockerfile pins python base image by digest" {
   run grep -E '^FROM\s+python:3\.11-slim@sha256:[a-f0-9]{64}$' alpaca-mcp.Dockerfile
   [ "$status" -eq 0 ]
@@ -12,6 +17,8 @@
 
 @test "CI validates compose config" {
   run grep -E 'docker compose -f docker-compose\.yml config --quiet' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'docker compose -f mock-mcp/docker-compose\.yml config --quiet' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 
@@ -24,6 +31,17 @@
   run grep -E 'docker image inspect agent-provost-alpaca-mcp:latest >/dev/null' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
   run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH agent-provost-alpaca-mcp:latest' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+}
+
+@test "CI scans built mock harness images" {
+  run grep -E 'docker image inspect mock-mcp-mock-mcp:latest >/dev/null' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH mock-mcp-mock-mcp:latest' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'docker image inspect mock-mcp-sovereign-api:latest >/dev/null' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH mock-mcp-sovereign-api:latest' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 
