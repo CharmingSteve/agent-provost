@@ -113,7 +113,9 @@ jobs:
         run: |
           printf 'ALPACA_API_KEY=dummy\nALPACA_SECRET_KEY=dummy\nALPACA_PAPER_TRADE=true\n' > .env
       - name: Validate docker compose spec
-        run: docker compose -f docker-compose.yml config --quiet
+        run: |
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f mock-mcp/docker-compose.yml config --quiet
       - name: Install Trivy
         run: |
           curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
@@ -126,7 +128,7 @@ jobs:
           docker compose -f docker-compose.yml pull agent-provost
           docker compose -f docker-compose.yml build alpaca-mcp
       - name: Trivy image scan (agent-provost)
-        run: trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:16527c6c0a8119dc948933718bf2e4a5366bc62b5b3cd72881999852ceaea94c
+        run: trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:dd00479e7a68b8ce1b18bcb519d74cbf2e62eb539026f3c680f2f391aeb545bb
       - name: Trivy image scan (alpaca-mcp build output)
         run: |
           set -euo pipefail
@@ -209,3 +211,93 @@ jobs:
                    has("upstream_response_time") and has("request_body") and
                    has("resp_body")' "${log}"
           done
+
+  # ── Mock harness (two-hop log visibility, no credentials required) ──────────
+  mock-harness:
+    name: Mock harness (hop1 + hop2 debug logs)
+    runs-on: ubuntu-latest
+    needs: [lint-shell, log-schema-validation]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq
+        run: sudo apt-get install -y jq
+      - name: Validate mock-mcp compose config
+        run: docker compose -f mock-mcp/docker-compose.yml config --quiet
+      - name: Create nginx log directory
+        run: mkdir -p nginx-logs
+      - name: Pull mock-mcp image
+        run: docker compose -f mock-mcp/docker-compose.yml pull mock-mcp
+      - name: Start mock-mcp services
+        run: docker compose -f mock-mcp/docker-compose.yml up -d
+      - name: Wait for hop1 mock MCP to be ready
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8088/ >/dev/null 2>&1; then
+              echo "Hop 1 mock-mcp is ready"
+              break
+            fi
+            echo "Waiting for hop1 mock-mcp... attempt $i/30"
+            sleep 2
+          done
+      - name: Wait for hop2 mock API to be ready
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8081/ >/dev/null 2>&1; then
+              echo "Hop 2 mock-api is ready"
+              break
+            fi
+            echo "Waiting for hop2 mock-api... attempt $i/30"
+            sleep 2
+          done
+      - name: Send test traffic – Hop 1 (LLM -> Agent Provost -> MCP)
+        run: |
+          set -euo pipefail
+          echo "=== Hop 1: LLM -> Agent Provost -> MCP ==="
+          curl -sf -X POST http://localhost:8088/ \
+            -H "Content-Type: application/json" \
+            -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"get_quote","arguments":{"symbol":"AAPL","quantity":1}},"id":1}'
+          echo ""
+      - name: Send test traffic – Hop 2 (MCP -> Agent Provost -> API)
+        run: |
+          set -euo pipefail
+          echo "=== Hop 2: MCP -> Agent Provost -> API ==="
+          curl -sf -X POST http://localhost:8081/ \
+            -H "Content-Type: application/json" \
+            -d '{"symbol":"AAPL","qty":1,"side":"buy","type":"market","time_in_force":"day"}'
+          echo ""
+      - name: Print container logs (all services)
+        if: always()
+        run: |
+          echo "=== Container logs: mock-mcp ==="
+          docker compose -f mock-mcp/docker-compose.yml logs --no-log-prefix
+      - name: Print hop1 access log (request_body + resp_body)
+        if: always()
+        run: |
+          echo "=== Hop 1 access log (LLM->MCP) ==="
+          cat nginx-logs/hop1_mock_access.log 2>/dev/null || echo "(no log yet)"
+          echo ""
+          echo "--- request_body entries ---"
+          jq -r '.request_body' nginx-logs/hop1_mock_access.log 2>/dev/null || echo "(none)"
+          echo "--- resp_body entries ---"
+          jq -r '.resp_body' nginx-logs/hop1_mock_access.log 2>/dev/null || echo "(none)"
+      - name: Print hop2 access log (request_body + resp_body)
+        if: always()
+        run: |
+          echo "=== Hop 2 access log (MCP->API) ==="
+          cat nginx-logs/hop2_mock_access.log 2>/dev/null || echo "(no log yet)"
+          echo ""
+          echo "--- request_body entries ---"
+          jq -r '.request_body' nginx-logs/hop2_mock_access.log 2>/dev/null || echo "(none)"
+          echo "--- resp_body entries ---"
+          jq -r '.resp_body' nginx-logs/hop2_mock_access.log 2>/dev/null || echo "(none)"
+      - name: Print hop1 error log
+        if: always()
+        run: cat nginx-logs/hop1_mock_error.log 2>/dev/null || echo "(no hop1 error log)"
+      - name: Print hop2 error log
+        if: always()
+        run: cat nginx-logs/hop2_mock_error.log 2>/dev/null || echo "(no hop2 error log)"
+      - name: Tear down mock services
+        if: always()
+        run: docker compose -f mock-mcp/docker-compose.yml down --volumes

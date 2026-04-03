@@ -651,7 +651,7 @@ Here is the "Senior DevOps" blueprint for how you structure this in your OpenRes
 ### 1. The Data Plane (The "Trader Token")
 This is the high-speed, high-volume traffic. This is the AI Agent (Claude Desktop) talking to the financial API (Alpaca/Nabatech).
 
-*   **The Token:** `X-Provost-Token: hf_corp_secret_9982` (Injected by the IT deployment script into Claude's config).
+*   **The Token:** `X-Provost-Token: EXAMPLE_TOKEN_VALUE` (Injected by the IT deployment script into Claude's config).
 *   **The Identity:** `X-Provost-User: jdoe@hedgefund.com` (Also injected).
 *   **The Access:** This token *only* grants access to the MCP routing block (e.g., `location /mcp/`).
 *   **The Restriction:** The Lua code in this block parses the JSON-RPC, enforces the trading risk limits (the "Jail Rules"), and forwards the traffic to the exchange. It has zero access to system commands.
@@ -659,7 +659,7 @@ This is the high-speed, high-volume traffic. This is the AI Agent (Claude Deskto
 ### 2. The Control Plane (The "Admin Token")
 This is the low-volume, high-privilege traffic. This is the IT/SecOps team managing the Agent Provost appliance itself.
 
-*   **The Token:** `X-Provost-Admin-Token: god_mode_admin_777` (Kept in the IT department's secure vault, like AWS Secrets Manager or HashiCorp Vault).
+*   **The Token:** `X-Provost-Admin-Token: EXAMPLE_ADMIN_TOKEN` (Kept in the IT department's secure vault, like AWS Secrets Manager or HashiCorp Vault).
 *   **The Access:** This token *only* grants access to a completely separate, hidden routing block (e.g., `location /provost-admin/`).
 *   **The Capabilities (No AI Allowed):**
     *   `POST /provost-admin/upgrade` (Triggers the `docker-compose pull` script).
@@ -676,7 +676,7 @@ You enforce this separation at the Nginx routing layer. It is bulletproof.
 location /mcp/ {
     # 1. Authenticate the Trader Token
     access_by_lua_block {
-        if ngx.var.http_x_provost_token ~= "hf_corp_secret_9982" then
+        if ngx.var.http_x_provost_token ~= "EXAMPLE_TOKEN_VALUE" then
             return ngx.exit(401)
         end
         -- ... (Run the Jail Rules on the JSON payload) ...
@@ -690,7 +690,7 @@ location /mcp/ {
 location /provost-admin/ {
     # 1. Authenticate the Admin Token
     access_by_lua_block {
-        if ngx.var.http_x_provost_admin_token ~= "god_mode_admin_777" then
+        if ngx.var.http_x_provost_admin_token ~= "EXAMPLE_ADMIN_TOKEN" then
             return ngx.exit(403) -- Use 403 to hide the endpoint's existence
         end
         

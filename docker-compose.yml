@@ -20,7 +20,7 @@ services:
     restart: unless-stopped
 
   agent-provost:
-    image: openresty/openresty@sha256:16527c6c0a8119dc948933718bf2e4a5366bc62b5b3cd72881999852ceaea94c
+    image: openresty/openresty@sha256:dd00479e7a68b8ce1b18bcb519d74cbf2e62eb539026f3c680f2f391aeb545bb
     container_name: agent-provost
     depends_on:
       - alpaca-mcp
