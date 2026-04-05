@@ -10,8 +10,8 @@
   [ "$status" -eq 0 ]
 }
 
-@test "alpaca-mcp.Dockerfile pins python base image by digest" {
-  run grep -E '^FROM\s+python:3\.11-slim@sha256:[a-f0-9]{64}$' alpaca-mcp.Dockerfile
+@test "alpaca-mcp.Dockerfile pins python alpine base image by digest" {
+  run grep -E '^FROM\s+python:3\.11-alpine@sha256:[a-f0-9]{64}$' alpaca-mcp.Dockerfile
   [ "$status" -eq 0 ]
 }
 

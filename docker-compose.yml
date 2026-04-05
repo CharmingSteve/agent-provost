@@ -17,6 +17,13 @@ services:
       - "8088"
     networks:
       - mcp_internal
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    pids_limit: 256
     restart: unless-stopped
 
   agent-provost:
@@ -34,6 +41,11 @@ services:
     networks:
       - mcp_internal
       - proxy_egress
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    pids_limit: 256
     restart: unless-stopped
 
 networks:

@@ -37,7 +37,10 @@ def call(sess, rid, method, params=None):
         payload["id"] = rid
     if params is not None:
         payload["params"] = params
-    r = sess.post(url, headers=headers, json=payload, timeout=45)
+    try:
+        r = sess.post(url, headers=headers, json=payload, timeout=45)
+    except requests.RequestException as exc:
+        return 0, {"error": str(exc)}
     if r.headers.get("mcp-session-id"):
         sid = r.headers["mcp-session-id"]
     txt = r.text.strip()
