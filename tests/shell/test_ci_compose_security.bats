@@ -10,8 +10,8 @@
   [ "$status" -eq 0 ]
 }
 
-@test "alpaca-mcp.Dockerfile pins python base image by digest" {
-  run grep -E '^FROM\s+python:3\.11-slim@sha256:[a-f0-9]{64}$' alpaca-mcp.Dockerfile
+@test "alpaca-mcp.Dockerfile pins python alpine base image by digest" {
+  run grep -E '^FROM\s+python:3\.11-alpine@sha256:[a-f0-9]{64}$' alpaca-mcp.Dockerfile
   [ "$status" -eq 0 ]
 }
 
@@ -28,9 +28,11 @@
 }
 
 @test "CI scans built alpaca-mcp image" {
-  run grep -E 'docker image inspect agent-provost-alpaca-mcp:latest >/dev/null' .github/workflows/ci.yml
+  run grep -E 'ALPACA_IMAGE_TAG=\$\(git rev-parse --short=7 HEAD\)' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH agent-provost-alpaca-mcp:latest' .github/workflows/ci.yml
+  run grep -E 'docker image inspect "agent-provost-alpaca-mcp:\$\{ALPACA_IMAGE_TAG\}" >/dev/null' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH "agent-provost-alpaca-mcp:\$\{ALPACA_IMAGE_TAG\}"' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 
@@ -39,9 +41,11 @@
   [ "$status" -eq 0 ]
   run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH mock-mcp-mock-mcp:latest' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E 'docker image inspect mock-mcp-sovereign-api:latest >/dev/null' .github/workflows/ci.yml
+  run grep -E 'docker image inspect mock-mcp-sovereign-api:latest >/dev/null 2>&1' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH mock-mcp-sovereign-api:latest' .github/workflows/ci.yml
+  run grep -E 'docker image inspect sovereign-mock-api:latest >/dev/null 2>&1' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH "\$SOVEREIGN_IMAGE"' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 

@@ -29,5 +29,5 @@ else:
 PYEOF
 
 echo "[entrypoint] Starting MCP Server with streamable-http transport..."
-exec alpaca-mcp-server --transport streamable-http --host 0.0.0.0 --port 8088
+exec uv run --no-project alpaca-mcp-server --transport streamable-http --host 0.0.0.0 --port 8088
 
