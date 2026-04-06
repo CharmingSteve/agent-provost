@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-app = FastAPI(title="Project SHAKED Sovereign Ledger Backend")
+app = FastAPI(title="Mock Sovereign API", version="0.2.0")
 
 
 class SovereignTransferRequest(BaseModel):
@@ -9,6 +9,13 @@ class SovereignTransferRequest(BaseModel):
     action: str
     amount: int
     destination_wallet: str
+
+
+class TransactionRequest(BaseModel):
+    ticker: str
+    action: str
+    qty: int
+    price: float
 
 
 @app.get("/reserve_status")
@@ -26,14 +33,7 @@ def sovereign_transfer(payload: SovereignTransferRequest) -> dict:
         "status": "settled",
         "transaction_id": "TXN-9982",
         "amount_transferred": payload.amount,
-app = FastAPI(title="Mock Sovereign API", version="0.2.0")
-
-
-class TransactionRequest(BaseModel):
-    ticker: str
-    action: str
-    qty: int
-    price: float
+    }
 
 
 @app.get("/portfolio")
