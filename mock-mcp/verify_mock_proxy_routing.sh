@@ -26,15 +26,12 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
 done
 
 echo "[verify-mock] sending MCP calls through hop-1"
-AGENT_IP="$($DOCKER_BIN inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mock-agent-provost)"
-[ -n "$AGENT_IP" ] || { echo "[verify-mock] FAIL: could not resolve mock-agent-provost container IP"; exit 1; }
-"$DOCKER_BIN" compose exec -T -e PROXY_URL="http://$AGENT_IP:8000/mcp" mock-mcp python - <<'PY'
+python3 - <<'PY'
 import json
-import os
 import time
 import requests
 
-url = os.environ["PROXY_URL"]
+url = "http://127.0.0.1:18088/mcp"
 sid = None
 
 
