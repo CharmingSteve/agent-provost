@@ -28,9 +28,11 @@
 }
 
 @test "CI scans built alpaca-mcp image" {
-  run grep -E 'docker image inspect agent-provost-alpaca-mcp:latest >/dev/null' .github/workflows/ci.yml
+  run grep -E 'ALPACA_IMAGE_TAG=\$\(git rev-parse --short=7 HEAD\)' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH agent-provost-alpaca-mcp:latest' .github/workflows/ci.yml
+  run grep -E 'docker image inspect "agent-provost-alpaca-mcp:\$\{ALPACA_IMAGE_TAG\}" >/dev/null' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH "agent-provost-alpaca-mcp:\$\{ALPACA_IMAGE_TAG\}"' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 

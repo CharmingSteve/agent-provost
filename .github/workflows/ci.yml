@@ -114,6 +114,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set short commit tag for alpaca image
+        run: echo "ALPACA_IMAGE_TAG=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
       - name: Prepare CI env file for compose parsing
         run: |
           printf 'ALPACA_API_KEY=dummy\nALPACA_SECRET_KEY=dummy\nALPACA_PAPER_TRADE=true\n' > .env
@@ -139,8 +141,8 @@ jobs:
       - name: Trivy image scan (alpaca-mcp build output)
         run: |
           set -euo pipefail
-          docker image inspect agent-provost-alpaca-mcp:latest >/dev/null
-          trivy image --exit-code 1 --severity CRITICAL,HIGH agent-provost-alpaca-mcp:latest
+          docker image inspect "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}" >/dev/null
+          trivy image --exit-code 1 --severity CRITICAL,HIGH "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}"
       - name: Trivy image scan (mock harness build outputs)
         run: |
           set -euo pipefail

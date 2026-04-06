@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: alpaca-mcp.Dockerfile
+    image: agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG:-latest}
     container_name: alpaca-mcp
     volumes:
       - ./entrypoint.sh:/entrypoint.sh:ro
