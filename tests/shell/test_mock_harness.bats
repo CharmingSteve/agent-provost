@@ -12,7 +12,7 @@
 }
 
 @test "mock compose wires MCP to hop-2 proxy endpoint" {
-  run grep -E 'SOVEREIGN_API_URL:\s*"http://agent-provost:8081"' mock-mcp/docker-compose.yml
+  run grep -E 'SOVEREIGN_API_URL:\s*"http://mock-agent-provost:8081"' mock-mcp/docker-compose.yml
   [ "$status" -eq 0 ]
 }
 

@@ -31,7 +31,7 @@ import json
 import time
 import requests
 
-url = "http://agent-provost:8000/mcp"
+url = "http://mock-agent-provost:8000/mcp"
 sid = None
 
 

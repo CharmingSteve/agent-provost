@@ -22,7 +22,7 @@ services:
       - sovereign-api
       - agent-provost
     environment:
-      SOVEREIGN_API_URL: "http://agent-provost:8081/sovereign"
+      SOVEREIGN_API_URL: "http://mock-agent-provost:8081/sovereign"
     command: ["uvicorn", "mock_mcp:app", "--host", "0.0.0.0", "--port", "8088"]
 
   mock-mcp:
@@ -32,7 +32,7 @@ services:
     container_name: mock-mcp
     command: ["python", "mock_mcp.py"]
     environment:
-      SOVEREIGN_API_URL: "http://agent-provost:8081"
+      SOVEREIGN_API_URL: "http://mock-agent-provost:8081"
       REQUEST_TIMEOUT_SECONDS: "15"
     expose:
       - "8088"
