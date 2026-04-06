@@ -64,7 +64,10 @@ def call(sess, rid, method, params=None):
     if params is not None:
         payload["params"] = params
 
-    resp = sess.post(url, headers=headers, json=payload, timeout=30)
+    try:
+        resp = sess.post(url, headers=headers, json=payload, timeout=30)
+    except requests.exceptions.RequestException as exc:
+        return 0, {"error": str(exc)}
     if resp.headers.get("mcp-session-id"):
         sid = resp.headers["mcp-session-id"]
     return resp.status_code, parse_payload(resp.text)
