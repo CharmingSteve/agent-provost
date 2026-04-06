@@ -1,0 +1,24 @@
+{
+  "max_trade_size": {
+    "enabled": true,
+    "description": "Block trades whose quantity exceeds the configured limit. Protects against oversized orders from a runaway agent.",
+    "params": {
+      "limit": 100
+    }
+  },
+  "blocked_tickers": {
+    "enabled": true,
+    "description": "Block trades on tickers that appear in the restricted symbol list. Prevents unauthorized exposure to specific securities.",
+    "params": {
+      "tickers": ["GME", "AMC", "BBBY"]
+    }
+  },
+  "trading_window": {
+    "enabled": false,
+    "description": "Restrict automated trading to allowed UTC hours only. Disabled by default; enable and configure start_hour/end_hour to activate.",
+    "params": {
+      "start_hour": 13,
+      "end_hour": 21
+    }
+  }
+}

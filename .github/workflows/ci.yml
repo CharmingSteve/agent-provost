@@ -154,6 +154,7 @@ jobs:
         run: |
           set +e
           docker image inspect mock-mcp-mock-mcp:latest >/dev/null
+          trivy image --exit-code 1 --severity CRITICAL,HIGH mock-mcp-mock-mcp:latest
           if docker image inspect mock-mcp-sovereign-api:latest >/dev/null 2>&1; then
             SOVEREIGN_IMAGE="mock-mcp-sovereign-api:latest"
           elif docker image inspect sovereign-mock-api:latest >/dev/null 2>&1; then

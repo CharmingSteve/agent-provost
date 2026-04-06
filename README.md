@@ -53,10 +53,30 @@ How they map:
 
 ## 🛡️ Safety Controls & Governance
 
-Agent Provost doesn't just watch; it protects. The proxy contains an active **Circuit Breaker** inside `default.conf` that inspects JSON payloads in real-time.
+Agent Provost doesn't just watch; it protects. The proxy contains an active **Circuit Breaker** inside `default.conf` that inspects JSON payloads in real-time using a **hot-reloadable, JSON-driven rule engine**.
 
-### Current Protection:
-- **Quantity Limit:** Any `tools/call` attempting to purchase or sell more than **100 units** is immediately intercepted with a `403 Forbidden` and the error: `PROVOST_INTERVENTION: Risk Limit Exceeded`.
+### Dynamic Rules Engine
+
+Rules are stored in [`rules.json`](rules.json) and evaluated by `lua/rules_engine.lua` on every request.  The rule set is kept in `lua_shared_dict` (OpenResty shared memory) and reloaded from disk every 10 seconds—no nginx reload or HUP required.
+
+See [`RULES_ENGINE.md`](RULES_ENGINE.md) for full documentation: JSON structure, hot-reload architecture, how to add rules, and operational notes for SREs.
+
+### Current Protections
+
+| Rule | Default | Description |
+|---|---|---|
+| `max_trade_size` | **enabled**, limit = 100 | Blocks any `tools/call` with `quantity` or `qty` > 100 |
+| `blocked_tickers` | **enabled**, list = GME/AMC/BBBY | Blocks trades on restricted ticker symbols |
+| `trading_window` | disabled | Placeholder: restrict trading to specific UTC hours |
+
+All blocked requests return `403 Forbidden` with a `PROVOST_INTERVENTION` JSON error body.
+
+### Live Rule Update Example (no restart)
+
+```bash
+# Lower the trade size limit from 100 to 10 — takes effect within 10 s
+sed -i 's/"limit": 100/"limit": 10/' rules.json
+```
 
 ### 💡 We Need Your Ideas!
 We are expanding the safety suite. What other controls should we add?
