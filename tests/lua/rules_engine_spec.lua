@@ -11,13 +11,18 @@ local engine = require("rules_engine")
 -- ---------------------------------------------------------------------------
 -- Helper: build a parsed request body with params.arguments
 -- ---------------------------------------------------------------------------
-local function make_parsed(args)
-    return { params = { arguments = args } }
+local function make_parsed(args, tool_name)
+    local parsed = { params = { arguments = args } }
+    if tool_name then
+        parsed.method = "tools/call"
+        parsed.params.name = tool_name
+    end
+    return parsed
 end
 
 -- ---------------------------------------------------------------------------
 -- max_trade_size rule
--- ---------------------------------------------------------------------------
+-- -------------------------------------------------------------------
 describe("rules_engine: max_trade_size rule", function()
 
     local rules_enabled = {
@@ -92,6 +97,103 @@ describe("rules_engine: max_trade_size rule", function()
         local rules_50 = { max_trade_size = { enabled = true, params = { limit = 50 } } }
         assert.is_true(engine.check_request(make_parsed({ quantity = 51 }), rules_50))
         assert.is_false(engine.check_request(make_parsed({ quantity = 50 }), rules_50))
+    end)
+
+end)
+
+-- ---------------------------------------------------------------------------
+-- blocked_tool_names rule
+-- ---------------------------------------------------------------------------
+describe("rules_engine: blocked_tool_names rule", function()
+
+    local rules_enabled = {
+        blocked_tool_names = {
+            enabled = true,
+            params  = { tools = { "place_stock_order" } }
+        }
+    }
+
+    local rules_disabled = {
+        blocked_tool_names = {
+            enabled = false,
+            params  = { tools = { "place_stock_order" } }
+        }
+    }
+
+    it("blocks a disabled trade tool by exact tool name", function()
+        local blocked = engine.check_request(
+            make_parsed({ symbol = "GME", qty = "1" }, "place_stock_order"),
+            rules_enabled)
+        assert.is_true(blocked)
+    end)
+
+    it("allows a safe tool when rule is disabled", function()
+        local blocked = engine.check_request(
+            make_parsed({ symbol = "GME", qty = "1" }, "place_stock_order"),
+            rules_disabled)
+        assert.is_false(blocked)
+    end)
+
+    it("allows a different tool when not blocked", function()
+        local blocked = engine.check_request(
+            make_parsed({ symbol = "GME", qty = "1" }, "get_stock_bars"),
+            rules_enabled)
+        assert.is_false(blocked)
+    end)
+
+end)
+
+-- ---------------------------------------------------------------------------
+-- restricted_ticker_tool_rules rule
+-- ---------------------------------------------------------------------------
+describe("rules_engine: restricted_ticker_tool_rules rule", function()
+
+    local rules_enabled = {
+        restricted_ticker_tool_rules = {
+            enabled = true,
+            params  = {
+                tools = { "place_stock_order", "place_option_order", "place_crypto_order" },
+                tickers = { "GME", "AMC", "BBBY" }
+            }
+        }
+    }
+
+    local rules_disabled = {
+        restricted_ticker_tool_rules = {
+            enabled = false,
+            params  = {
+                tools = { "place_stock_order" },
+                tickers = { "GME" }
+            }
+        }
+    }
+
+    it("blocks a restricted symbol for a supported order tool", function()
+        local blocked = engine.check_request(
+            make_parsed({ symbol = "GME", qty = "1" }, "place_stock_order"),
+            rules_enabled)
+        assert.is_true(blocked)
+    end)
+
+    it("blocks a restricted symbol with ticker field for a supported order tool", function()
+        local blocked = engine.check_request(
+            make_parsed({ ticker = "AMC", quantity = 1 }, "place_stock_order"),
+            rules_enabled)
+        assert.is_true(blocked)
+    end)
+
+    it("does not block a permitted symbol for a supported order tool", function()
+        local blocked = engine.check_request(
+            make_parsed({ symbol = "AAPL", qty = "1" }, "place_stock_order"),
+            rules_enabled)
+        assert.is_false(blocked)
+    end)
+
+    it("does not block a restricted symbol when the rule is disabled", function()
+        local blocked = engine.check_request(
+            make_parsed({ symbol = "GME", qty = "1" }, "place_stock_order"),
+            rules_disabled)
+        assert.is_false(blocked)
     end)
 
 end)

@@ -66,7 +66,9 @@ See [`RULES_ENGINE.md`](RULES_ENGINE.md) for full documentation: JSON structure,
 | Rule | Default | Description |
 |---|---|---|
 | `max_trade_size` | **enabled**, limit = 100 | Blocks any `tools/call` with `quantity` or `qty` > 100 |
-| `blocked_tickers` | **enabled**, list = GME/AMC/BBBY | Blocks trades on restricted ticker symbols |
+| `blocked_tickers` | **enabled**, list = GME/AMC/BBBY | Blocks trades on restricted ticker symbols using normalized symbol fields |
+| `blocked_tool_names` | disabled | Optional: block named trade tools regardless of argument syntax |
+| `restricted_ticker_tool_rules` | **enabled**, list = GME/AMC/BBBY | Blocks restricted symbols when used by specific order tools |
 | `trading_window` | disabled | Placeholder: restrict trading to specific UTC hours |
 
 All blocked requests return `403 Forbidden` with a `PROVOST_INTERVENTION` JSON error body.

@@ -82,7 +82,7 @@ Blocks any request whose `quantity` or `qty` field exceeds `params.limit`.
 
 #### `blocked_tickers`
 
-Blocks any request whose `ticker` field matches a symbol in `params.tickers`.
+Blocks any request whose `ticker` or equivalent symbol field matches a symbol in `params.tickers`.
 
 ```json
 "blocked_tickers": {
@@ -97,6 +97,44 @@ Blocks any request whose `ticker` field matches a symbol in `params.tickers`.
 | Param | Type | Description |
 |---|---|---|
 | `tickers` | string[] | List of exact ticker symbols to reject |
+
+#### `blocked_tool_names`
+
+Blocks requests whose explicit MCP tool name is in `params.tools`.
+
+```json
+"blocked_tool_names": {
+  "enabled": false,
+  "description": "Block specific MCP tool names regardless of field variation in the arguments.",
+  "params": {
+    "tools": ["place_stock_order", "place_option_order", "place_crypto_order"]
+  }
+}
+```
+
+| Param | Type | Description |
+|---|---|---|
+| `tools` | string[] | Exact MCP tool names to reject |
+
+#### `restricted_ticker_tool_rules`
+
+Blocks requests that use a specific trade tool and a restricted ticker symbol, even when the symbol is provided via different field names.
+
+```json
+"restricted_ticker_tool_rules": {
+  "enabled": true,
+  "description": "Block restricted symbols when they are used by specific trade tools, regardless of argument field naming.",
+  "params": {
+    "tools": ["place_stock_order", "place_option_order", "place_crypto_order"],
+    "tickers": ["GME", "AMC", "BBBY"]
+  }
+}
+```
+
+| Param | Type | Description |
+|---|---|---|
+| `tools` | string[] | Tool names whose requests should be checked against restricted symbols |
+| `tickers` | string[] | Restricted ticker symbol list |
 
 #### `trading_window`
 
