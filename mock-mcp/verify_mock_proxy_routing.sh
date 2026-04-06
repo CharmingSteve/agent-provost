@@ -53,7 +53,7 @@ def parse_payload(text: str):
         return {"raw": text}
 
 
-def call(sess, rid, method, params=None):
+def call(sess, rid, method, params=None, timeout_seconds=30):
     global sid
     headers = {
         "Accept": "application/json, text/event-stream",
@@ -69,7 +69,7 @@ def call(sess, rid, method, params=None):
         payload["params"] = params
 
     try:
-        resp = sess.post(url, headers=headers, json=payload, timeout=30)
+        resp = sess.post(url, headers=headers, json=payload, timeout=timeout_seconds)
     except requests.exceptions.RequestException as exc:
         return 0, {"error": str(exc)}
     if resp.headers.get("mcp-session-id"):
@@ -80,7 +80,7 @@ def call(sess, rid, method, params=None):
 with requests.Session() as s:
     init_status = 0
     init_payload = {}
-    for _ in range(90):
+    for _ in range(60):
         for candidate in candidate_urls:
             url = candidate
             init_status, init_payload = call(
@@ -92,6 +92,7 @@ with requests.Session() as s:
                     "capabilities": {},
                     "clientInfo": {"name": "mock-verify", "version": "1.0"},
                 },
+                timeout_seconds=2,
             )
             if init_status == 200:
                 break
