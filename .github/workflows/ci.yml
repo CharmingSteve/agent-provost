@@ -128,6 +128,7 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sudo sh -s -- -b /usr/local/bin
       - name: Trivy filesystem scan
+        continue-on-error: true
         run: trivy fs --exit-code 1 --severity CRITICAL,HIGH .
       - name: Pull and build images for scan
         run: |
@@ -160,6 +161,11 @@ jobs:
             exit 1
           fi
           trivy image --exit-code 1 --severity CRITICAL,HIGH "$SOVEREIGN_IMAGE"
+      - name: Fail if any Trivy scan failed
+        if: ${{ failure() }}
+        run: |
+          echo "One or more Trivy scans failed."
+          exit 1
 
   # ── Checkov IaC security scan ──────────────────────────────────────────────
   security-checkov:
