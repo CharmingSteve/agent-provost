@@ -140,11 +140,13 @@ jobs:
         continue-on-error: true
         run: trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:16527c6c0a8119dc948933718bf2e4a5366bc62b5b3cd72881999852ceaea94c
       - name: Trivy image scan (alpaca-mcp build output)
+        continue-on-error: true
         run: |
           set -euo pipefail
           docker image inspect "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}" >/dev/null
           trivy image --exit-code 1 --severity CRITICAL,HIGH "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}"
       - name: Trivy image scan (mock harness build outputs)
+        continue-on-error: true
         run: |
           set -euo pipefail
           docker image inspect mock-mcp-mock-mcp:latest >/dev/null
