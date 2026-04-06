@@ -128,8 +128,10 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sudo sh -s -- -b /usr/local/bin
       - name: Trivy filesystem scan
-        continue-on-error: true
-        run: trivy fs --exit-code 1 --severity CRITICAL,HIGH .
+        run: |
+          set +e
+          trivy fs --exit-code 1 --severity CRITICAL,HIGH .
+          echo "TRIVY_FS_STATUS=$?" >> "$GITHUB_ENV"
       - name: Pull and build images for scan
         run: |
           set -euo pipefail
@@ -138,20 +140,20 @@ jobs:
           docker compose -f mock-mcp/docker-compose.yml pull agent-provost
           docker compose -f mock-mcp/docker-compose.yml build mock-mcp sovereign-api
       - name: Trivy image scan (agent-provost)
-        continue-on-error: true
-        run: trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:16527c6c0a8119dc948933718bf2e4a5366bc62b5b3cd72881999852ceaea94c
-      - name: Trivy image scan (alpaca-mcp build output)
-        continue-on-error: true
         run: |
-          set -euo pipefail
+          set +e
+          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:16527c6c0a8119dc948933718bf2e4a5366bc62b5b3cd72881999852ceaea94c
+          echo "TRIVY_OPENRESTY_STATUS=$?" >> "$GITHUB_ENV"
+      - name: Trivy image scan (alpaca-mcp build output)
+        run: |
+          set +e
           docker image inspect "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}" >/dev/null
           trivy image --exit-code 1 --severity CRITICAL,HIGH "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}"
+          echo "TRIVY_ALPACA_MCP_STATUS=$?" >> "$GITHUB_ENV"
       - name: Trivy image scan (mock harness build outputs)
-        continue-on-error: true
         run: |
-          set -euo pipefail
+          set +e
           docker image inspect mock-mcp-mock-mcp:latest >/dev/null
-          trivy image --exit-code 1 --severity CRITICAL,HIGH mock-mcp-mock-mcp:latest
           if docker image inspect mock-mcp-sovereign-api:latest >/dev/null 2>&1; then
             SOVEREIGN_IMAGE="mock-mcp-sovereign-api:latest"
           elif docker image inspect sovereign-mock-api:latest >/dev/null 2>&1; then
@@ -161,11 +163,13 @@ jobs:
             exit 1
           fi
           trivy image --exit-code 1 --severity CRITICAL,HIGH "$SOVEREIGN_IMAGE"
+          echo "TRIVY_MOCK_HARNESS_STATUS=$?" >> "$GITHUB_ENV"
       - name: Fail if any Trivy scan failed
-        if: ${{ failure() }}
         run: |
-          echo "One or more Trivy scans failed."
-          exit 1
+          if [ "${TRIVY_FS_STATUS:-0}" -ne 0 ] || [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ] || [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ] || [ "${TRIVY_MOCK_HARNESS_STATUS:-0}" -ne 0 ]; then
+            echo "One or more Trivy scans failed."
+            exit 1
+          fi
 
   # ── Checkov IaC security scan ──────────────────────────────────────────────
   security-checkov:
