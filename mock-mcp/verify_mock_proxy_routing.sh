@@ -75,8 +75,9 @@ def call(sess, rid, method, params=None):
 
 with requests.Session() as s:
     init_status = 0
-    for _ in range(20):
-        init_status, _ = call(
+    init_payload = {}
+    for _ in range(60):
+        init_status, init_payload = call(
             s,
             1,
             "initialize",
@@ -91,7 +92,7 @@ with requests.Session() as s:
         time.sleep(1)
 
     if init_status != 200:
-        raise SystemExit("initialize failed")
+        raise SystemExit(f"initialize failed (status={init_status}, payload={init_payload})")
 
     call(s, None, "notifications/initialized", {})
 
