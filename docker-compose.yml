@@ -30,6 +30,8 @@ services:
       - "8081"
     volumes:
       - ./default.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      - ./lua:/etc/nginx/lua:ro
+      - ./rules.json:/etc/rules.json:ro
       - ./nginx-logs:/data/nginx-logs
     networks:
       - mcp_internal

@@ -1,0 +1,105 @@
+-- rules_engine.lua
+-- Pure rule evaluation module for Agent Provost.
+--
+-- Checks a decoded MCP request body against a rules table sourced from
+-- lua_shared_dict (populated by rule_loader.lua). This module has no I/O
+-- or OpenResty dependencies and can be required in both OpenResty workers
+-- and busted unit tests.
+--
+-- Usage (in access_by_lua_block):
+--   local engine  = require("rules_engine")
+--   local cjson   = require("cjson.safe")
+--   local raw     = ngx.shared.rules:get("rules")
+--   local rules   = raw and cjson.decode(raw) or {}
+--   local blocked, reason = engine.check_request(parsed, rules)
+--   if blocked then ... end
+
+local _M = {}
+
+-- Fallback limit used when max_trade_size rule is enabled but params.limit
+-- is absent or non-numeric.
+local DEFAULT_TRADE_SIZE_LIMIT = 100
+
+-- check_request evaluates a decoded request body against the rules table.
+--
+-- @param  parsed  table|nil  Decoded JSON request body (output of cjson.decode).
+-- @param  rules   table|nil  Rules table from shared dict.  Nil is treated as
+--                            an empty table (fail-open: no rules applied).
+-- @return blocked bool       true when the request must be blocked.
+-- @return reason  string|nil Human-readable PROVOST_INTERVENTION message, or
+--                            nil when not blocked.
+function _M.check_request(parsed, rules)
+    rules = rules or {}
+
+    -- No parseable body or wrong shape: pass through.
+    if not parsed
+       or type(parsed.params) ~= "table"
+       or type(parsed.params.arguments) ~= "table" then
+        return false, nil
+    end
+
+    local args = parsed.params.arguments
+
+    -- ----------------------------------------------------------------
+    -- Rule: max_trade_size
+    -- Blocks requests where qty/quantity exceeds the configured limit.
+    -- ----------------------------------------------------------------
+    local size_rule = rules.max_trade_size
+    if type(size_rule) == "table" and size_rule.enabled == true then
+        local limit = DEFAULT_TRADE_SIZE_LIMIT
+        if type(size_rule.params) == "table"
+           and type(size_rule.params.limit) == "number" then
+            limit = size_rule.params.limit
+        end
+        local qty = tonumber(args.quantity) or tonumber(args.qty)
+        if qty ~= nil and qty > limit then
+            return true,
+                "PROVOST_INTERVENTION: Risk Limit Exceeded. " ..
+                "Attempted trade size too large. Blocked to protect capital."
+        end
+    end
+
+    -- ----------------------------------------------------------------
+    -- Rule: blocked_tickers
+    -- Blocks requests whose ticker field matches the restricted list.
+    -- ----------------------------------------------------------------
+    local ticker_rule = rules.blocked_tickers
+    if type(ticker_rule) == "table" and ticker_rule.enabled == true then
+        local ticker = tostring(args.ticker or "")
+        if type(ticker_rule.params) == "table"
+           and type(ticker_rule.params.tickers) == "table" then
+            for _, blocked_sym in ipairs(ticker_rule.params.tickers) do
+                if ticker == tostring(blocked_sym) then
+                    return true,
+                        "PROVOST_INTERVENTION: Ticker '" .. ticker ..
+                        "' is on the restricted list."
+                end
+            end
+        end
+    end
+
+    -- ----------------------------------------------------------------
+    -- Rule: trading_window  (placeholder — disabled by default)
+    -- Blocks requests outside allowed UTC trading hours.
+    -- Requires ngx.time(); skipped when ngx is not available.
+    -- ----------------------------------------------------------------
+    local window_rule = rules.trading_window
+    if type(window_rule) == "table" and window_rule.enabled == true then
+        if type(ngx) == "table" and type(ngx.time) == "function" then
+            local params = window_rule.params or {}
+            local start_h = tonumber(params.start_hour) or 0
+            local end_h   = tonumber(params.end_hour)   or 23
+            -- Use os.date('!*t') to get the current UTC hour correctly.
+            local hour    = os.date("!*t", ngx.time()).hour
+            if hour < start_h or hour >= end_h then
+                return true,
+                    "PROVOST_INTERVENTION: Trading outside allowed window " ..
+                    "(" .. start_h .. ":00-" .. end_h .. ":00 UTC)."
+            end
+        end
+    end
+
+    return false, nil
+end
+
+return _M
