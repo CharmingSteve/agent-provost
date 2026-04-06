@@ -26,12 +26,16 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
 done
 
 echo "[verify-mock] sending MCP calls through hop-1"
-"$DOCKER_BIN" compose exec -T mock-mcp python - <<'PY'
+if ! "$DOCKER_BIN" compose exec -T mock-mcp python - <<'PY'
 import json
 import time
 import requests
 
-url = "http://agent-provost:8000/mcp"
+candidate_urls = [
+    "http://agent-provost:8000/mcp",
+    "http://mock-agent-provost:8000/mcp",
+]
+url = candidate_urls[0]
 sid = None
 
 
@@ -49,7 +53,7 @@ def parse_payload(text: str):
         return {"raw": text}
 
 
-def call(sess, rid, method, params=None):
+def call(sess, rid, method, params=None, timeout_seconds=30):
     global sid
     headers = {
         "Accept": "application/json, text/event-stream",
@@ -64,7 +68,10 @@ def call(sess, rid, method, params=None):
     if params is not None:
         payload["params"] = params
 
-    resp = sess.post(url, headers=headers, json=payload, timeout=30)
+    try:
+        resp = sess.post(url, headers=headers, json=payload, timeout=timeout_seconds)
+    except requests.exceptions.RequestException as exc:
+        return 0, {"error": str(exc)}
     if resp.headers.get("mcp-session-id"):
         sid = resp.headers["mcp-session-id"]
     return resp.status_code, parse_payload(resp.text)
@@ -72,23 +79,31 @@ def call(sess, rid, method, params=None):
 
 with requests.Session() as s:
     init_status = 0
-    for _ in range(20):
-        init_status, _ = call(
-            s,
-            1,
-            "initialize",
-            {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "mock-verify", "version": "1.0"},
-            },
-        )
+    init_payload = {}
+    for _ in range(60):
+        for candidate in candidate_urls:
+            url = candidate
+            init_status, init_payload = call(
+                s,
+                1,
+                "initialize",
+                {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "mock-verify", "version": "1.0"},
+                },
+                timeout_seconds=2,
+            )
+            if init_status == 200:
+                break
         if init_status == 200:
             break
         time.sleep(1)
 
     if init_status != 200:
-        raise SystemExit("initialize failed")
+        raise SystemExit(
+            f"initialize failed (status={init_status}, payload={init_payload}, tried={candidate_urls})"
+        )
 
     call(s, None, "notifications/initialized", {})
 
@@ -161,6 +176,7 @@ with requests.Session() as s:
         raise SystemExit(f"expected qty block (403), got {blocked_qty_status}")
 
     print("initialize_status=200")
+    print(f"mcp_url={url}")
     print("tools_status=200")
     print(f"get_portfolio_state_status={ok_status}")
     print(f"execute_transaction_status={tx_status}")
@@ -170,6 +186,15 @@ with requests.Session() as s:
     print(f"portfolio_payload_keys={list(ok_payload.keys()) if isinstance(ok_payload, dict) else 'raw'}")
     print(f"transaction_payload_keys={list(tx_payload.keys()) if isinstance(tx_payload, dict) else 'raw'}")
 PY
+then
+    echo "[verify-mock] diagnostics: compose ps"
+    "$DOCKER_BIN" compose ps || true
+    echo "[verify-mock] diagnostics: agent-provost logs"
+    "$DOCKER_BIN" compose logs --tail=120 agent-provost || true
+    echo "[verify-mock] diagnostics: mock-mcp logs"
+    "$DOCKER_BIN" compose logs --tail=120 mock-mcp || true
+    exit 1
+fi
 
 echo "[verify-mock] checking bounded tail snippets"
 llm_tail="$(tail -n 8 "$LOG_DIR/llm_to_mcp_access.log" || true)"

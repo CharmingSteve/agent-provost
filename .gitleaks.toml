@@ -1,0 +1,10 @@
+title = "agent-provost gitleaks config"
+
+[[allowlists]]
+description = "Allow historical mock token example in docs history"
+regexes = [
+  '''hf_corp_secret_9982''',
+]
+paths = [
+  '''(?i)todo\.md''',
+]

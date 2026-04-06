@@ -1,9 +1,11 @@
-FROM python:3.11-slim@sha256:9358444059ed78e2975ada2c189f1c1a3144a5dab6f35bff8c981afb38946634
+FROM python:3.11-alpine@sha256:f07e2ace46f560f09a6eeec7b4913b80ee99546e749ef82342a419a326620856
 
-RUN pip install --no-cache-dir "alpaca-mcp-server==2.0.0" \
+RUN apk upgrade --no-cache \
+	&& pip install --no-cache-dir "uv==0.8.16" \
+	&& pip install --no-cache-dir "alpaca-mcp-server==2.0.0" \
 	&& pip install --no-cache-dir "pip==24.0" "setuptools==82.0.1" "wheel==0.46.3" "jaraco.context==6.1.2" \
-		&& useradd --create-home --uid 10001 --shell /bin/sh appuser \
-		&& chown -R appuser:appuser /usr/local/lib/python3.11/site-packages
+	&& adduser -D -u 10001 -s /bin/sh appuser \
+	&& chown -R appuser:appuser /usr/local/lib/python3.11/site-packages
 
 USER appuser
 
