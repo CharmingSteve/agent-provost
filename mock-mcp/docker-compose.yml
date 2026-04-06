@@ -54,7 +54,9 @@ services:
       - ./default.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
       - ./nginx-logs:/data/nginx-logs
     networks:
-      - mcp_internal
+      mcp_internal:
+        aliases:
+          - agent-provost
     restart: unless-stopped
 
 networks:
