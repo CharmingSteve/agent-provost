@@ -26,12 +26,16 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
 done
 
 echo "[verify-mock] sending MCP calls through hop-1"
-if ! python3 - <<'PY'
+if ! "$DOCKER_BIN" compose exec -T mock-mcp python - <<'PY'
 import json
 import time
 import requests
 
-url = "http://127.0.0.1:18088/mcp"
+candidate_urls = [
+    "http://agent-provost:8000/mcp",
+    "http://mock-agent-provost:8000/mcp",
+]
+url = candidate_urls[0]
 sid = None
 
 
@@ -77,22 +81,28 @@ with requests.Session() as s:
     init_status = 0
     init_payload = {}
     for _ in range(90):
-        init_status, init_payload = call(
-            s,
-            1,
-            "initialize",
-            {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "mock-verify", "version": "1.0"},
-            },
-        )
+        for candidate in candidate_urls:
+            url = candidate
+            init_status, init_payload = call(
+                s,
+                1,
+                "initialize",
+                {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "mock-verify", "version": "1.0"},
+                },
+            )
+            if init_status == 200:
+                break
         if init_status == 200:
             break
         time.sleep(1)
 
     if init_status != 200:
-        raise SystemExit(f"initialize failed (status={init_status}, payload={init_payload})")
+        raise SystemExit(
+            f"initialize failed (status={init_status}, payload={init_payload}, tried={candidate_urls})"
+        )
 
     call(s, None, "notifications/initialized", {})
 
@@ -165,6 +175,7 @@ with requests.Session() as s:
         raise SystemExit(f"expected qty block (403), got {blocked_qty_status}")
 
     print("initialize_status=200")
+    print(f"mcp_url={url}")
     print("tools_status=200")
     print(f"get_portfolio_state_status={ok_status}")
     print(f"execute_transaction_status={tx_status}")
