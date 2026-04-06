@@ -146,8 +146,15 @@ jobs:
           set -euo pipefail
           docker image inspect mock-mcp-mock-mcp:latest >/dev/null
           trivy image --exit-code 1 --severity CRITICAL,HIGH mock-mcp-mock-mcp:latest
-          docker image inspect sovereign-mock-api:latest >/dev/null
-          trivy image --exit-code 1 --severity CRITICAL,HIGH sovereign-mock-api:latest
+          if docker image inspect mock-mcp-sovereign-api:latest >/dev/null 2>&1; then
+            SOVEREIGN_IMAGE="mock-mcp-sovereign-api:latest"
+          elif docker image inspect sovereign-mock-api:latest >/dev/null 2>&1; then
+            SOVEREIGN_IMAGE="sovereign-mock-api:latest"
+          else
+            echo "Could not find sovereign mock image tag"
+            exit 1
+          fi
+          trivy image --exit-code 1 --severity CRITICAL,HIGH "$SOVEREIGN_IMAGE"
 
   # ── Checkov IaC security scan ──────────────────────────────────────────────
   security-checkov:
