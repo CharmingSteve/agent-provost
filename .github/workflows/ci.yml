@@ -112,6 +112,8 @@ jobs:
   security-trivy:
     name: Trivy (filesystem / image scan)
     runs-on: ubuntu-latest
+    env:
+      TRIVY_IGNOREFILE: .trivyignore
     steps:
       - uses: actions/checkout@v4
       - name: Prepare CI env file for compose parsing
@@ -174,7 +176,7 @@ jobs:
             | tar -xz -C /tmp
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
       - name: Run Gitleaks
-        run: gitleaks detect --source . --verbose
+        run: gitleaks detect --source . --verbose --config .gitleaks.toml
 
   # ── Credentials gate (sets output used by integration-tests) ─────────────────
   check-credentials:

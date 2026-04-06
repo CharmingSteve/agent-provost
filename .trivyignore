@@ -1,0 +1,4 @@
+# Upstream OpenResty base image findings tracked in CI log for PR #14.
+# Remove these ignores after bumping to an OpenResty digest that includes patched libpng.
+CVE-2026-33416
+CVE-2026-33636
