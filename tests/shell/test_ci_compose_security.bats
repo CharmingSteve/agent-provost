@@ -39,9 +39,11 @@
   [ "$status" -eq 0 ]
   run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH mock-mcp-mock-mcp:latest' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E 'docker image inspect mock-mcp-sovereign-api:latest >/dev/null' .github/workflows/ci.yml
+  run grep -E 'docker image inspect mock-mcp-sovereign-api:latest >/dev/null 2>&1' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH mock-mcp-sovereign-api:latest' .github/workflows/ci.yml
+  run grep -E 'docker image inspect sovereign-mock-api:latest >/dev/null 2>&1' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH "\$SOVEREIGN_IMAGE"' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 
