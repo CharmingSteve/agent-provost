@@ -26,7 +26,7 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
 done
 
 echo "[verify-mock] sending MCP calls through hop-1"
-python3 - <<'PY'
+if ! python3 - <<'PY'
 import json
 import time
 import requests
@@ -76,7 +76,7 @@ def call(sess, rid, method, params=None):
 with requests.Session() as s:
     init_status = 0
     init_payload = {}
-    for _ in range(60):
+    for _ in range(90):
         init_status, init_payload = call(
             s,
             1,
@@ -174,6 +174,15 @@ with requests.Session() as s:
     print(f"portfolio_payload_keys={list(ok_payload.keys()) if isinstance(ok_payload, dict) else 'raw'}")
     print(f"transaction_payload_keys={list(tx_payload.keys()) if isinstance(tx_payload, dict) else 'raw'}")
 PY
+then
+    echo "[verify-mock] diagnostics: compose ps"
+    "$DOCKER_BIN" compose ps || true
+    echo "[verify-mock] diagnostics: agent-provost logs"
+    "$DOCKER_BIN" compose logs --tail=120 agent-provost || true
+    echo "[verify-mock] diagnostics: mock-mcp logs"
+    "$DOCKER_BIN" compose logs --tail=120 mock-mcp || true
+    exit 1
+fi
 
 echo "[verify-mock] checking bounded tail snippets"
 llm_tail="$(tail -n 8 "$LOG_DIR/llm_to_mcp_access.log" || true)"
