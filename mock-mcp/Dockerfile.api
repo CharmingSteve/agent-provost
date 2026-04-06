@@ -2,7 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir fastapi uvicorn pydantic
+RUN pip install --no-cache-dir \
+    "setuptools==82.0.1" \
+    "wheel==0.46.3" \
+    fastapi \
+    uvicorn \
+    pydantic
 
 COPY mock_api.py /app/mock_api.py
 
@@ -12,4 +17,4 @@ RUN useradd --create-home --uid 10001 --shell /bin/sh appuser \
 USER appuser
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-	CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/reserve_status', timeout=3)" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/reserve_status', timeout=3)" || exit 1
