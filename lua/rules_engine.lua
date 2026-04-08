@@ -20,6 +20,45 @@ local _M = {}
 -- is absent or non-numeric.
 local DEFAULT_TRADE_SIZE_LIMIT = 100
 
+local function get_tool_name(parsed)
+    if type(parsed) ~= "table" then
+        return nil
+    end
+
+    if parsed.method == "tools/call"
+       and type(parsed.params) == "table"
+       and type(parsed.params.name) == "string" then
+        return parsed.params.name
+    end
+
+    if type(parsed.method) == "string" then
+        return parsed.method
+    end
+
+    return nil
+end
+
+local function normalize_quantity(args)
+    if type(args) ~= "table" then
+        return nil
+    end
+
+    return tonumber(args.quantity)
+        or tonumber(args.qty)
+        or tonumber(args.order_quantity)
+end
+
+local function normalize_ticker(args)
+    if type(args) ~= "table" then
+        return ""
+    end
+
+    return tostring(args.ticker
+        or args.symbol
+        or args.symbol_or_asset_id
+        or "")
+end
+
 -- check_request evaluates a decoded request body against the rules table.
 --
 -- @param  parsed  table|nil  Decoded JSON request body (output of cjson.decode).
@@ -40,6 +79,8 @@ function _M.check_request(parsed, rules)
 
     local args = parsed.params.arguments
 
+    local tool_name = get_tool_name(parsed)
+
     -- ----------------------------------------------------------------
     -- Rule: max_trade_size
     -- Blocks requests where qty/quantity exceeds the configured limit.
@@ -51,11 +92,55 @@ function _M.check_request(parsed, rules)
            and type(size_rule.params.limit) == "number" then
             limit = size_rule.params.limit
         end
-        local qty = tonumber(args.quantity) or tonumber(args.qty)
+        local qty = normalize_quantity(args)
         if qty ~= nil and qty > limit then
             return true,
                 "PROVOST_INTERVENTION: Risk Limit Exceeded. " ..
                 "Attempted trade size too large. Blocked to protect capital."
+        end
+    end
+
+    -- ----------------------------------------------------------------
+    -- Rule: blocked_tool_names
+    -- Blocks requests whose tool name is explicitly restricted.
+    -- ----------------------------------------------------------------
+    local tool_rule = rules.blocked_tool_names
+    if type(tool_rule) == "table" and tool_rule.enabled == true
+       and type(tool_rule.params) == "table"
+       and type(tool_rule.params.tools) == "table"
+       and tool_name ~= nil then
+        for _, blocked_tool in ipairs(tool_rule.params.tools) do
+            if tool_name == tostring(blocked_tool) then
+                return true,
+                    "PROVOST_INTERVENTION: Tool '" .. tool_name ..
+                    "' is on the restricted list."
+            end
+        end
+    end
+
+    -- ----------------------------------------------------------------
+    -- Rule: restricted_ticker_tool_rules
+    -- Blocks restricted symbols when used by specific order tools.
+    -- ----------------------------------------------------------------
+    local restricted_tool_rule = rules.restricted_ticker_tool_rules
+    if type(restricted_tool_rule) == "table" and restricted_tool_rule.enabled == true
+       and type(restricted_tool_rule.params) == "table"
+       and type(restricted_tool_rule.params.tools) == "table"
+       and type(restricted_tool_rule.params.tickers) == "table"
+       and tool_name ~= nil then
+        local ticker = normalize_ticker(args)
+        if ticker ~= "" then
+            for _, blocked_tool in ipairs(restricted_tool_rule.params.tools) do
+                if tool_name == tostring(blocked_tool) then
+                    for _, blocked_sym in ipairs(restricted_tool_rule.params.tickers) do
+                        if ticker == tostring(blocked_sym) then
+                            return true,
+                                "PROVOST_INTERVENTION: Restricted symbol '" .. ticker ..
+                                "' blocked for tool '" .. tool_name .. "'."
+                        end
+                    end
+                end
+            end
         end
     end
 
@@ -65,7 +150,7 @@ function _M.check_request(parsed, rules)
     -- ----------------------------------------------------------------
     local ticker_rule = rules.blocked_tickers
     if type(ticker_rule) == "table" and ticker_rule.enabled == true then
-        local ticker = tostring(args.ticker or "")
+        local ticker = normalize_ticker(args)
         if type(ticker_rule.params) == "table"
            and type(ticker_rule.params.tickers) == "table" then
             for _, blocked_sym in ipairs(ticker_rule.params.tickers) do

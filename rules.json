@@ -13,6 +13,21 @@
       "tickers": ["GME", "AMC", "BBBY"]
     }
   },
+  "blocked_tool_names": {
+    "enabled": false,
+    "description": "Block specific MCP tool names regardless of field variation in the arguments.",
+    "params": {
+      "tools": ["place_stock_order", "place_option_order", "place_crypto_order"]
+    }
+  },
+  "restricted_ticker_tool_rules": {
+    "enabled": true,
+    "description": "Block restricted ticker symbols when they are used by specific trade tools, regardless of argument field naming.",
+    "params": {
+      "tools": ["place_stock_order", "place_option_order", "place_crypto_order"],
+      "tickers": ["GME", "AMC", "BBBY"]
+    }
+  },
   "trading_window": {
     "enabled": false,
     "description": "Restrict automated trading to allowed UTC hours only. Disabled by default; enable and configure start_hour/end_hour to activate.",
