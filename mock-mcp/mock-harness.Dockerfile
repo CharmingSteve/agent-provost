@@ -3,11 +3,15 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# Apply OS security patches (fixes CVE-2026-28390 openssl)
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 RUN pip install --no-cache-dir \
     "setuptools==82.0.1" \
     "wheel==0.46.3" \
+    "jaraco.context==6.1.0" \
     fastapi==0.135.2 \
     uvicorn==0.42.0 \
     "mcp==1.26.0" \

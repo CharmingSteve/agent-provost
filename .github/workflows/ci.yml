@@ -143,7 +143,7 @@ jobs:
       - name: Trivy image scan (agent-provost)
         run: |
           set +e
-          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:16527c6c0a8119dc948933718bf2e4a5366bc62b5b3cd72881999852ceaea94c
+          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50
           echo "TRIVY_OPENRESTY_STATUS=$?" >> "$GITHUB_ENV"
       - name: Trivy image scan (alpaca-mcp build output)
         run: |
@@ -320,7 +320,7 @@ jobs:
       - name: Step 5 (Security Tests) - Trivy image scan (agent-provost)
         run: |
           set +e
-          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:16527c6c0a8119dc948933718bf2e4a5366bc62b5b3cd72881999852ceaea94c
+          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50
           echo "TRIVY_OPENRESTY_STATUS=$?" >> "$GITHUB_ENV"
       - name: Step 5 (Security Tests) - Trivy image scan (alpaca-mcp build output)
         run: |
