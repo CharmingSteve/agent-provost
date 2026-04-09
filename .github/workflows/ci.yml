@@ -15,6 +15,96 @@ permissions:
   contents: read
 
 jobs:
+  build-secure-push-test:
+    name: Build -> Secure -> Push -> Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Step 1 (Build) - Build alpaca image with latest and SHA tags
+        run: |
+          set -euo pipefail
+          IMAGE_URI="public.ecr.aws/e2u9m9o7/agent-provost"
+          echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
+          echo "IMAGE_SHA_TAG=${GITHUB_SHA}" >> "$GITHUB_ENV"
+          docker build -f alpaca-mcp.Dockerfile \
+            -t "${IMAGE_URI}:latest" \
+            -t "${IMAGE_URI}:${GITHUB_SHA}" \
+            .
+
+      - name: Step 2 (Security Tests) - Install Trivy
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+
+      - name: Step 2 (Security Tests) - Trivy filesystem scan
+        run: |
+          set +e
+          trivy fs --exit-code 1 --severity CRITICAL,HIGH .
+          echo "TRIVY_FS_STATUS=$?" >> "$GITHUB_ENV"
+
+      - name: Step 2 (Security Tests) - Trivy image scan (agent-provost image)
+        run: |
+          set +e
+          trivy image --exit-code 1 --severity CRITICAL,HIGH "${IMAGE_URI}:latest"
+          echo "TRIVY_ALPACA_MCP_STATUS=$?" >> "$GITHUB_ENV"
+
+      - name: Step 2 (Security Tests) - Trivy image scan (openresty base)
+        run: |
+          set +e
+          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:16527c6c0a8119dc948933718bf2e4a5366bc62b5b3cd72881999852ceaea94c
+          echo "TRIVY_OPENRESTY_STATUS=$?" >> "$GITHUB_ENV"
+
+      - name: Step 2 (Security Tests) - Fail if Trivy scans failed
+        run: |
+          if [ "${TRIVY_FS_STATUS:-0}" -ne 0 ] || [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ] || [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
+            echo "One or more Trivy scans failed."
+            exit 1
+          fi
+
+      - name: Step 3 (Authenticate to AWS)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Step 4 (Login to ECR Public)
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - name: Step 4 (Push image tags)
+        run: |
+          set -euo pipefail
+          docker push "${IMAGE_URI}:latest"
+          docker push "${IMAGE_URI}:${IMAGE_SHA_TAG}"
+
+      - name: Step 5 (Sanity/Integration Tests) - Prepare env
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          printf 'ALPACA_API_KEY=%s\nALPACA_SECRET_KEY=%s\nALPACA_PAPER_TRADE=true\n' \
+            "${ALPACA_API_KEY:-dummy}" "${ALPACA_SECRET_KEY:-dummy}" > .env
+
+      - name: Step 5 (Sanity/Integration Tests) - Pull and start compose
+        run: |
+          set -euo pipefail
+          docker compose pull alpaca-mcp
+          docker compose up -d
+
+      - name: Step 5 (Sanity/Integration Tests) - Install bats
+        run: sudo apt-get install -y bats
+
+      - name: Step 5 (Sanity/Integration Tests) - Run existing sanity tests
+        run: bats tests/shell/
+
+      - name: Step 5 (Sanity/Integration Tests) - Cleanup
+        if: always()
+        run: docker compose down -v
+
   # ── Shell linting ──────────────────────────────────────────────────────────
   lint-shell:
     name: ShellCheck
@@ -136,7 +226,7 @@ jobs:
         run: |
           set -euo pipefail
           docker compose -f docker-compose.yml pull agent-provost
-          docker compose -f docker-compose.yml build alpaca-mcp
+          docker build -f alpaca-mcp.Dockerfile -t agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG} .
           docker compose -f mock-mcp/docker-compose.yml pull agent-provost
           docker compose -f mock-mcp/docker-compose.yml build mock-mcp sovereign-api
       - name: Trivy image scan (agent-provost)
