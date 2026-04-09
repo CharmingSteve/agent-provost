@@ -287,33 +287,48 @@ jobs:
           docker build -f alpaca-mcp.Dockerfile \
             -t public.ecr.aws/e2u9m9o7/agent-provost:latest \
             -t public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG} .
+      - name: Step 2 (Authenticate to AWS)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Step 3 (Login & Push to ECR)
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+      - name: Step 4 (Login & Push to ECR) - Push tags
+        run: |
+          set -euo pipefail
+          docker push public.ecr.aws/e2u9m9o7/agent-provost:latest
+          docker push public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}
       - name: Install Trivy
         run: |
           curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sudo sh -s -- -b /usr/local/bin
-      - name: Step 2 (Security Tests) - Trivy filesystem scan
+      - name: Step 5 (Security Tests) - Trivy filesystem scan
         run: |
           set +e
           trivy fs --exit-code 1 --severity CRITICAL,HIGH .
           echo "TRIVY_FS_STATUS=$?" >> "$GITHUB_ENV"
-      - name: Step 2 (Security Tests) - Pull and build additional images for scan
+      - name: Step 5 (Security Tests) - Pull and build additional images for scan
         run: |
           set -euo pipefail
           docker compose -f docker-compose.yml pull agent-provost
           docker compose -f mock-mcp/docker-compose.yml pull agent-provost
           docker compose -f mock-mcp/docker-compose.yml build mock-mcp sovereign-api
-      - name: Step 2 (Security Tests) - Trivy image scan (agent-provost)
+      - name: Step 5 (Security Tests) - Trivy image scan (agent-provost)
         run: |
           set +e
           trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:16527c6c0a8119dc948933718bf2e4a5366bc62b5b3cd72881999852ceaea94c
           echo "TRIVY_OPENRESTY_STATUS=$?" >> "$GITHUB_ENV"
-      - name: Step 2 (Security Tests) - Trivy image scan (alpaca-mcp build output)
+      - name: Step 5 (Security Tests) - Trivy image scan (alpaca-mcp build output)
         run: |
           set +e
           docker image inspect "public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}" >/dev/null
           trivy image --exit-code 1 --severity CRITICAL,HIGH "public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}"
           echo "TRIVY_ALPACA_MCP_STATUS=$?" >> "$GITHUB_ENV"
-      - name: Step 2 (Security Tests) - Trivy image scan (mock harness build outputs)
+      - name: Step 5 (Security Tests) - Trivy image scan (mock harness build outputs)
         run: |
           set +e
           docker image inspect mock-mcp-mock-mcp:latest >/dev/null
@@ -328,21 +343,6 @@ jobs:
           fi
           trivy image --exit-code 1 --severity CRITICAL,HIGH "$SOVEREIGN_IMAGE"
           echo "TRIVY_MOCK_HARNESS_STATUS=$?" >> "$GITHUB_ENV"
-      - name: Step 3 (Authenticate to AWS)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-      - name: Step 4 (Login & Push to ECR)
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registry-type: public
-      - name: Step 4 (Login & Push to ECR) - Push tags
-        run: |
-          set -euo pipefail
-          docker push public.ecr.aws/e2u9m9o7/agent-provost:latest
-          docker push public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}
       - name: Step 5 (Sanity/Integration Tests)
         run: |
           set -euo pipefail
