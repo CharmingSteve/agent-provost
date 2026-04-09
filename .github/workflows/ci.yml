@@ -8,6 +8,7 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 # Restrict the default GITHUB_TOKEN to read-only; jobs that need more
 # permissions declare their own permissions block explicitly.
