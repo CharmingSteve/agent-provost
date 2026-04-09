@@ -349,7 +349,7 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y bats
           bats tests/shell/
-      - name: Step 2 (Security Tests) - Fail if any Trivy scan failed
+      - name: Step 6 (Security Gate) - Fail if any Trivy scan failed
         if: always()
         run: |
           if [ "${TRIVY_FS_STATUS:-0}" -ne 0 ] || [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ] || [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ] || [ "${TRIVY_MOCK_HARNESS_STATUS:-0}" -ne 0 ]; then
