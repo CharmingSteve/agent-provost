@@ -124,6 +124,12 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sudo sh -s -- -b /usr/local/bin
+      - name: Debug Trivy version and DB
+        run: |
+          trivy --version
+          trivy db status
+          trivy db update
+          trivy db status
       - name: Trivy filesystem scan
         run: |
           set +e
@@ -270,6 +276,12 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sudo sh -s -- -b /usr/local/bin
+      - name: Step 5 (Security Tests) - Debug Trivy version and DB
+        run: |
+          trivy --version
+          trivy db status
+          trivy db update
+          trivy db status
       - name: Step 5 (Security Tests) - Trivy filesystem scan
         run: |
           set +e
