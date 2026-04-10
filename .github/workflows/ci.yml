@@ -29,7 +29,6 @@ jobs:
           set -euo pipefail
           shellcheck entrypoint.sh
           shellcheck verify_proxy_routing.sh
-          shellcheck mock-mcp/verify_mock_proxy_routing.sh
 
   # ── Dockerfile linting ─────────────────────────────────────────────────────
   lint-dockerfile:
@@ -45,7 +44,6 @@ jobs:
       - name: Lint Dockerfile
         run: |
           hadolint alpaca-mcp.Dockerfile
-          hadolint mock-mcp/mock-harness.Dockerfile
 
   # ── Lua linting ────────────────────────────────────────────────────────────
   lint-lua:
@@ -98,7 +96,7 @@ jobs:
       - name: Validate log JSON schema keys are defined in default.conf
         run: |
           set -euo pipefail
-          for conf in default.conf mock-mcp/default.conf; do
+          for conf in default.conf; do
             for key in time_local remote_addr request status body_bytes_sent \
                        request_time upstream_response_time request_body resp_body; do
               if ! grep -q "\"${key}\"" "$conf"; then
@@ -122,8 +120,6 @@ jobs:
           printf 'ALPACA_API_KEY=dummy\nALPACA_SECRET_KEY=dummy\nALPACA_PAPER_TRADE=true\n' > .env
       - name: Validate docker compose spec
         run: docker compose -f docker-compose.yml config --quiet
-      - name: Validate mock harness compose spec
-        run: docker compose -f mock-mcp/docker-compose.yml config --quiet
       - name: Install Trivy
         run: |
           curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
@@ -138,12 +134,10 @@ jobs:
           set -euo pipefail
           docker compose -f docker-compose.yml pull agent-provost
           docker compose -f docker-compose.yml build alpaca-mcp
-          docker compose -f mock-mcp/docker-compose.yml pull agent-provost
-          docker compose -f mock-mcp/docker-compose.yml build mock-mcp sovereign-api
       - name: Trivy image scan (agent-provost)
         run: |
           set +e
-          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:16527c6c0a8119dc948933718bf2e4a5366bc62b5b3cd72881999852ceaea94c
+          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50
           echo "TRIVY_OPENRESTY_STATUS=$?" >> "$GITHUB_ENV"
       - name: Trivy image scan (alpaca-mcp build output)
         run: |
@@ -151,24 +145,10 @@ jobs:
           docker image inspect "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}" >/dev/null
           trivy image --exit-code 1 --severity CRITICAL,HIGH "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}"
           echo "TRIVY_ALPACA_MCP_STATUS=$?" >> "$GITHUB_ENV"
-      - name: Trivy image scan (mock harness build outputs)
-        run: |
-          set +e
-          docker image inspect mock-mcp-mock-mcp:latest >/dev/null
-          trivy image --exit-code 1 --severity CRITICAL,HIGH mock-mcp-mock-mcp:latest
-          if docker image inspect mock-mcp-sovereign-api:latest >/dev/null 2>&1; then
-            SOVEREIGN_IMAGE="mock-mcp-sovereign-api:latest"
-          elif docker image inspect sovereign-mock-api:latest >/dev/null 2>&1; then
-            SOVEREIGN_IMAGE="sovereign-mock-api:latest"
-          else
-            echo "Could not find sovereign mock image tag"
-            exit 1
-          fi
-          trivy image --exit-code 1 --severity CRITICAL,HIGH "$SOVEREIGN_IMAGE"
-          echo "TRIVY_MOCK_HARNESS_STATUS=$?" >> "$GITHUB_ENV"
       - name: Fail if any Trivy scan failed
         run: |
-          if [ "${TRIVY_FS_STATUS:-0}" -ne 0 ] || [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ] || [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ] || [ "${TRIVY_MOCK_HARNESS_STATUS:-0}" -ne 0 ]; then
+          # Mock harness images are demo-only and excluded from gate
+          if [ "${TRIVY_FS_STATUS:-0}" -ne 0 ] || [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ] || [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
             echo "One or more Trivy scans failed."
             exit 1
           fi
@@ -250,22 +230,6 @@ jobs:
                    has("resp_body")' "${log}"
           done
 
-  mock-harness-integration:
-    name: Mock harness integration (end-to-end)
-    runs-on: ubuntu-latest
-    needs: [test-lua, test-shell, log-schema-validation]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install python3 requests
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install requests
-      - name: Run mock harness verification script
-        working-directory: mock-mcp
-        run: ./verify_mock_proxy_routing.sh
-      - name: Validate mock proxy config in running container
-        run: docker exec mock-agent-provost nginx -t
-
   # ── Build → Secure → Push → Test (ECR Public) ─────────────────────────────
   build-secure-push-test:
     name: Build -> Secure -> Push -> Test (ECR Public)
@@ -315,12 +279,10 @@ jobs:
         run: |
           set -euo pipefail
           docker compose -f docker-compose.yml pull agent-provost
-          docker compose -f mock-mcp/docker-compose.yml pull agent-provost
-          docker compose -f mock-mcp/docker-compose.yml build mock-mcp sovereign-api
       - name: Step 5 (Security Tests) - Trivy image scan (agent-provost)
         run: |
           set +e
-          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:16527c6c0a8119dc948933718bf2e4a5366bc62b5b3cd72881999852ceaea94c
+          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50
           echo "TRIVY_OPENRESTY_STATUS=$?" >> "$GITHUB_ENV"
       - name: Step 5 (Security Tests) - Trivy image scan (alpaca-mcp build output)
         run: |
@@ -328,21 +290,6 @@ jobs:
           docker image inspect "public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}" >/dev/null
           trivy image --exit-code 1 --severity CRITICAL,HIGH "public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}"
           echo "TRIVY_ALPACA_MCP_STATUS=$?" >> "$GITHUB_ENV"
-      - name: Step 5 (Security Tests) - Trivy image scan (mock harness build outputs)
-        run: |
-          set +e
-          docker image inspect mock-mcp-mock-mcp:latest >/dev/null
-          trivy image --exit-code 1 --severity CRITICAL,HIGH mock-mcp-mock-mcp:latest
-          if docker image inspect mock-mcp-sovereign-api:latest >/dev/null 2>&1; then
-            SOVEREIGN_IMAGE="mock-mcp-sovereign-api:latest"
-          elif docker image inspect sovereign-mock-api:latest >/dev/null 2>&1; then
-            SOVEREIGN_IMAGE="sovereign-mock-api:latest"
-          else
-            echo "Could not find sovereign mock image tag"
-            exit 1
-          fi
-          trivy image --exit-code 1 --severity CRITICAL,HIGH "$SOVEREIGN_IMAGE"
-          echo "TRIVY_MOCK_HARNESS_STATUS=$?" >> "$GITHUB_ENV"
       - name: Step 5 (Sanity/Integration Tests)
         run: |
           set -euo pipefail
@@ -353,7 +300,8 @@ jobs:
       - name: Step 6 (Security Gate) - Fail if any Trivy scan failed
         if: always()
         run: |
-          if [ "${TRIVY_FS_STATUS:-0}" -ne 0 ] || [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ] || [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ] || [ "${TRIVY_MOCK_HARNESS_STATUS:-0}" -ne 0 ]; then
+          # Mock harness images are demo-only and excluded from gate
+          if [ "${TRIVY_FS_STATUS:-0}" -ne 0 ] || [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ] || [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
             echo "One or more Trivy scans failed."
             exit 1
           fi

@@ -53,3 +53,5 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+# Never commit local Trivy ignore overrides
+.trivyignore
