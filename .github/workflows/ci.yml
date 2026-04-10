@@ -127,9 +127,7 @@ jobs:
       - name: Debug Trivy version and DB
         run: |
           trivy --version
-          trivy db status
-          trivy db update
-          trivy db status
+          trivy image --download-db-only
       - name: Trivy filesystem scan
         run: |
           set +e
@@ -279,9 +277,7 @@ jobs:
       - name: Step 5 (Security Tests) - Debug Trivy version and DB
         run: |
           trivy --version
-          trivy db status
-          trivy db update
-          trivy db status
+          trivy image --download-db-only
       - name: Step 5 (Security Tests) - Trivy filesystem scan
         run: |
           set +e
