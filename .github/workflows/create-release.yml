@@ -1,0 +1,52 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.0.3-alpha.1)'
+        required: true
+        default: 'v0.0.3-alpha.1'
+      target_branch:
+        description: 'Target branch for the release'
+        required: true
+        default: 'main'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          TARGET="${{ github.event.inputs.target_branch }}"
+
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --target "$TARGET" \
+            --title "Release ${TAG}: CI Hardening & Codebase Cleanup" \
+            --prerelease \
+            --notes "# Release ${TAG}: CI Hardening & Codebase Cleanup
+
+This is a focused maintenance release that hardens the CI/CD pipeline and cleans up the codebase after the major v0.0.2-alpha.1 sprint.
+
+## 🔧 What's Changed
+
+### Fix: ECR push no longer skipped when Trivy finds vulnerabilities (#20)
+The \`build-secure-push-test\` job was aborting before ECR push whenever Trivy found CRITICAL/HIGH CVEs, making it impossible to push an image to ECR to iterate on CVE fixes.
+- Reordered CI steps so ECR authenticate/login/push always runs before the Trivy security gate.
+- The Trivy gate is now positioned at the final step with \`if: always()\` so it still correctly fails the job when vulnerabilities are found, but no longer prevents the push.
+
+### Remove mock sovereign harness from main branch (#21)
+Stripped the demo-only mock sovereign harness code, tests, and CI integration out of the main production branch. The mock sovereign harness is preserved in a separate demo branch. This keeps the main branch focused strictly on the production build, security scanning, and the core application path.
+- Removed 1,609 lines of demo/test scaffolding across 21 files.
+- Retained the 13 lines needed for the production path.
+
+## 📌 Previous Release
+For the major feature release — including the hot-reloadable rules engine, intent normalization, unified CI pipeline, and Docker hardening — see **[v0.0.2-alpha.1](https://github.com/CharmingSteve/agent-provost/releases/tag/v0.0.2-alpha.1)**, which contains the bulk of the architectural changes.
+
+**Full Changelog**: https://github.com/CharmingSteve/agent-provost/compare/v0.0.2-alpha.1...${TAG}"
