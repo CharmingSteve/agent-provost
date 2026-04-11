@@ -5,9 +5,15 @@ ROOT_DIR="${ROOT_DIR:-$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)}"
 PROJECT_DIR="${PROJECT_DIR:-$(dirname "$ROOT_DIR")}"
 LOG_DIR="${LOG_DIR:-$ROOT_DIR/nginx-logs}"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
-PYTHON_BIN="${PYTHON_BIN:-$PROJECT_DIR/.venv/bin/python}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+BOOTSTRAP_MODE="${BOOTSTRAP_MODE:-dev}"
 
 cd "$ROOT_DIR"
+
+echo "[verify] starting with bootstrap mode: $BOOTSTRAP_MODE"
+
+# Stage secrets via bootstrap wrapper (source output to set PROVOST_SECRETS_DIR)
+eval "$(sh "$ROOT_DIR/bootstrap.sh" "$BOOTSTRAP_MODE")"
 
 echo "[verify] restarting stack"
 "$DOCKER_BIN" compose up -d --force-recreate >/dev/null

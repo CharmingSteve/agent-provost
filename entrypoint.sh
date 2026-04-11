@@ -1,6 +1,17 @@
 #!/bin/sh
 set -e
 
+# Load secrets from mounted files (set by bootstrap or docker compose)
+if [ -f /run/secrets/alpaca_api_key ]; then
+  export ALPACA_API_KEY="$(cat /run/secrets/alpaca_api_key)"
+fi
+if [ -f /run/secrets/alpaca_secret_key ]; then
+  export ALPACA_SECRET_KEY="$(cat /run/secrets/alpaca_secret_key)"
+fi
+if [ -f /run/secrets/alpaca_paper_trade ]; then
+  export ALPACA_PAPER_TRADE="$(cat /run/secrets/alpaca_paper_trade)"
+fi
+
 echo "[entrypoint] Patching TRADE_API_URL support into server.py..."
 SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
 SERVER_PY="$SITE_PACKAGES/alpaca_mcp_server/server.py"
