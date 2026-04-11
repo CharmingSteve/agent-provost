@@ -3,6 +3,9 @@
 # This script stages secrets into an ephemeral directory and exports PROVOST_SECRETS_DIR.
 # The caller is responsible for cleanup if using temp directories.
 #
+# If PROVOST_SECRETS_DIR is already set and valid, this script reuses it.
+# Otherwise, based on MODE, it creates a new ephemeral directory.
+#
 # Usage:
 #   eval "$(./bootstrap.sh dev)"           # Outputs shell commands to export PROVOST_SECRETS_DIR
 #   eval "$(./bootstrap.sh runner)"        # With ALPACA_API_KEY, ALPACA_SECRET_KEY in environment
@@ -11,6 +14,15 @@
 set -e
 
 MODE="${1:-dev}"
+
+# Check if secrets are already staged
+if [ -n "${PROVOST_SECRETS_DIR:-}" ] && [ -d "$PROVOST_SECRETS_DIR" ] && \
+   [ -f "$PROVOST_SECRETS_DIR/alpaca_api_key" ] && [ -f "$PROVOST_SECRETS_DIR/alpaca_secret_key" ]; then
+  # Secrets already staged, just export the path
+  echo "export PROVOST_SECRETS_DIR='$PROVOST_SECRETS_DIR'"
+  echo "echo '[bootstrap] secrets already staged in $PROVOST_SECRETS_DIR'"
+  exit 0
+fi
 
 case "$MODE" in
   dev)

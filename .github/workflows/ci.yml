@@ -214,6 +214,7 @@ jobs:
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
         run: |
           eval "$(sh bootstrap.sh runner)"
+          echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR" >> "$GITHUB_ENV"
       - name: Run Integration Tests
         env:
           BOOTSTRAP_MODE: runner
