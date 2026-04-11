@@ -3,13 +3,16 @@ set -e
 
 # Load secrets from mounted files (set by bootstrap or docker compose)
 if [ -f /run/secrets/alpaca_api_key ]; then
-  export ALPACA_API_KEY="$(cat /run/secrets/alpaca_api_key)"
+  ALPACA_API_KEY="$(cat /run/secrets/alpaca_api_key)"
+  export ALPACA_API_KEY
 fi
 if [ -f /run/secrets/alpaca_secret_key ]; then
-  export ALPACA_SECRET_KEY="$(cat /run/secrets/alpaca_secret_key)"
+  ALPACA_SECRET_KEY="$(cat /run/secrets/alpaca_secret_key)"
+  export ALPACA_SECRET_KEY
 fi
 if [ -f /run/secrets/alpaca_paper_trade ]; then
-  export ALPACA_PAPER_TRADE="$(cat /run/secrets/alpaca_paper_trade)"
+  ALPACA_PAPER_TRADE="$(cat /run/secrets/alpaca_paper_trade)"
+  export ALPACA_PAPER_TRADE
 fi
 
 echo "[entrypoint] Patching TRADE_API_URL support into server.py..."
