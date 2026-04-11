@@ -115,9 +115,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set short commit tag for alpaca image
         run: echo "ALPACA_IMAGE_TAG=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
-      - name: Prepare CI env file for compose parsing
+      - name: Stage dummy secrets for compose parsing
         run: |
-          printf 'ALPACA_API_KEY=dummy\nALPACA_SECRET_KEY=dummy\nALPACA_PAPER_TRADE=true\n' > .env
+          eval "$(sh bootstrap.sh runner)"
       - name: Validate docker compose spec
         run: docker compose -f docker-compose.yml config --quiet
       - name: Install Trivy
@@ -212,15 +212,16 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install jq
         run: sudo apt-get install -y jq
-      - name: Prepare env
+      - name: Stage real secrets for integration tests
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
         run: |
-          set -euo pipefail
-          printf 'ALPACA_API_KEY=%s\nALPACA_SECRET_KEY=%s\nALPACA_PAPER_TRADE=true\n' \
-            "$ALPACA_API_KEY" "$ALPACA_SECRET_KEY" > .env
+          eval "$(sh bootstrap.sh runner)"
+          echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR" >> "$GITHUB_ENV"
       - name: Run Integration Tests
+        env:
+          BOOTSTRAP_MODE: runner
         run: ./verify_proxy_routing.sh
       - name: Validate nginx config in running container
         run: docker exec agent-provost nginx -t
@@ -246,9 +247,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set image tags
         run: echo "IMAGE_SHA_TAG=${GITHUB_SHA}" >> "$GITHUB_ENV"
-      - name: Prepare CI env file for compose parsing
+      - name: Stage dummy secrets for build
         run: |
-          printf 'ALPACA_API_KEY=dummy\nALPACA_SECRET_KEY=dummy\nALPACA_PAPER_TRADE=true\n' > .env
+          eval "$(sh bootstrap.sh runner)"
       - name: Step 1 (Build)
         run: |
           set -euo pipefail

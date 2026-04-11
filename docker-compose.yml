@@ -7,9 +7,8 @@ services:
     container_name: alpaca-mcp
     volumes:
       - ./entrypoint.sh:/entrypoint.sh:ro
+      - ${PROVOST_SECRETS_DIR:-./.secrets}:/run/secrets:ro
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
-    env_file:
-      - .env
     environment:
       TRADE_API_URL: "http://agent-provost:8081/trading"
       DATA_API_URL: "http://agent-provost:8081/data"
