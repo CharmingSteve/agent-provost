@@ -116,7 +116,7 @@ Each entry captures:
 
 ### 1. Requirements
 - Docker and Docker Compose
-- Alpaca API Keys (Paper or Live) in a `.env` file
+- Alpaca API Keys (Paper or Live) in a `.env` file for local dev
 
 ### 2. Run the Compliance Check
 Run the built-in verification script to spin up the stack, execute a test trade, and verify the logs:
@@ -138,7 +138,10 @@ The script:
 Log side effects are intentional. If you need to preserve existing logs, copy them out before running the script.
 
 ### 3. Manual Startup
+Before starting the stack locally, stage secrets from `.env`:
+
 ```bash
+eval "$(sh bootstrap.sh dev)"
 docker compose up -d --build
 ```
 
