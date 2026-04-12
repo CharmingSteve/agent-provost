@@ -172,6 +172,25 @@ For integration and EC2/production, `bootstrap.sh` also stages `provost_token` f
 
 ---
 
+## 🧪 Testing Token Authentication
+
+Token authentication is validated across three levels:
+- **Configuration tests** (Lua/BATS): Verify token validation code and secret staging logic are present
+- **Permission tests** (BATS): Verify token files are staged with restrictive `600` permissions
+- **Runtime tests** (BATS): Requests with missing/invalid tokens are rejected with appropriate HTTP status codes
+
+Run token auth tests locally:
+
+```bash
+bats tests/shell/test_provost_token.bats  # 12 token auth validation tests
+bats tests/shell/                           # All 34 shell tests
+busted tests/lua/                            # All 103 Lua config tests
+```
+
+The CI pipeline runs all tests and gates deployment on successful auth and audit validation.
+
+---
+
 ## Demo harness note
 
 The sovereign mock harness is not included in this branch. Use the separate demo branch for `mock-mcp/` proof-of-concept code and end-to-end mock verification.
