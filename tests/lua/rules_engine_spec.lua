@@ -101,6 +101,53 @@ describe("rules_engine: max_trade_size rule", function()
 
 end)
 
+    it("blocks notional orders estimated above share limit with valid limit_price", function()
+        -- notional=$10,001 / limit_price=$100 = 100.01 shares > 100 limit
+        local blocked, reason = engine.check_request(
+            make_parsed({ notional = 10001, limit_price = 100 }),
+            { max_trade_size = { enabled = true, params = { limit = 100 } } })
+        assert.is_true(blocked)
+        assert.truthy(reason:find("PROVOST_INTERVENTION"))
+    end)
+
+    it("allows notional orders estimated below share limit", function()
+        -- notional=$5,000 / limit_price=$100 = 50 shares < 100 limit
+        local rules_enabled = { max_trade_size = { enabled = true, params = { limit = 100 } } }
+        local blocked = engine.check_request(
+            make_parsed({ notional = 5000, limit_price = 100 }),
+            rules_enabled)
+        assert.is_false(blocked)
+    end)
+
+    it("blocks notional orders without limit_price (fail-safe)", function()
+        local rules_enabled = { max_trade_size = { enabled = true, params = { limit = 100 } } }
+        local blocked, reason = engine.check_request(
+            make_parsed({ notional = 100000 }),
+            rules_enabled)
+        assert.is_true(blocked)
+        assert.truthy(reason:find("limit_price"))
+    end)
+
+    it("blocks notional orders with zero or invalid limit_price", function()
+        local rules_enabled = { max_trade_size = { enabled = true, params = { limit = 100 } } }
+        local blocked_zero = engine.check_request(
+            make_parsed({ notional = 100000, limit_price = 0 }),
+            rules_enabled)
+        assert.is_true(blocked_zero)
+        local blocked_neg = engine.check_request(
+            make_parsed({ notional = 100000, limit_price = -50 }),
+            rules_enabled)
+        assert.is_true(blocked_neg)
+    end)
+
+    it("respects custom limit value for notional orders", function()
+        local rules_50 = { max_trade_size = { enabled = true, params = { limit = 50 } } }
+        -- 50 shares at limit: notional=$5,000 / price=$100
+        assert.is_false(engine.check_request(make_parsed({ notional = 5000, limit_price = 100 }), rules_50))
+        -- 51 shares over limit: notional=$5,100 / price=$100
+        assert.is_true(engine.check_request(make_parsed({ notional = 5100, limit_price = 100 }), rules_50))
+    end)
+
 -- ---------------------------------------------------------------------------
 -- blocked_tool_names rule
 -- ---------------------------------------------------------------------------

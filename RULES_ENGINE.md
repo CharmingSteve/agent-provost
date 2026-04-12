@@ -91,9 +91,17 @@ Blocks any request whose `ticker` or equivalent symbol field matches a symbol in
   "params": {
     "tickers": ["GME", "AMC", "BBBY"]
   }
+  **Notional Order Handling (New)**
 }
+  The `max_trade_size` rule also evaluates **notional (dollar-based)** orders to prevent bypassing the share-count limit via quantity-free specifications. When a request includes a `notional` field but no explicit quantity:
 ```
+  1. **If `limit_price` is provided**: Estimate the share count as `notional / limit_price` and block if it exceeds the limit.
+  2. **If `limit_price` is missing or invalid**: **Fail-safe: block the order.** Cannot safely determine the share count without a price, so the request is rejected.
 
+  **Example scenarios:**
+  - `notional: 10000, limit_price: 100` → estimated 100 shares (at limit, allowed)
+  - `notional: 10001, limit_price: 100` → estimated 100.01 shares (over limit, blocked)
+  - `notional: 50000, limit_price: null` → cannot estimate shares, blocked (fail-safe)
 | Param | Type | Description |
 |---|---|---|
 | `tickers` | string[] | List of exact ticker symbols to reject |
