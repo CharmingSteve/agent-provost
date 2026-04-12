@@ -15,9 +15,17 @@ set -e
 
 MODE="${1:-dev}"
 
+write_secret_file() {
+  value="$1"
+  path="$2"
+  printf '%s' "$value" > "$path"
+  chmod 600 "$path"
+}
+
 # Check if secrets are already staged
 if [ -n "${PROVOST_SECRETS_DIR:-}" ] && [ -d "$PROVOST_SECRETS_DIR" ] && \
-   [ -f "$PROVOST_SECRETS_DIR/alpaca_api_key" ] && [ -f "$PROVOST_SECRETS_DIR/alpaca_secret_key" ]; then
+  [ -f "$PROVOST_SECRETS_DIR/alpaca_api_key" ] && [ -f "$PROVOST_SECRETS_DIR/alpaca_secret_key" ] && \
+  [ -f "$PROVOST_SECRETS_DIR/provost_token" ]; then
   # Secrets already staged, just export the path
   echo "export PROVOST_SECRETS_DIR='$PROVOST_SECRETS_DIR'"
   echo "echo '[bootstrap] secrets already staged in $PROVOST_SECRETS_DIR'"
@@ -35,14 +43,12 @@ case "$MODE" in
     PROVOST_SECRETS_DIR=$(mktemp -d)
     
     # Load .env and write secret files
-    eval "$(grep -E '^(ALPACA_API_KEY|ALPACA_SECRET_KEY|ALPACA_PAPER_TRADE)=' .env)"
+    eval "$(grep -E '^(ALPACA_API_KEY|ALPACA_SECRET_KEY|ALPACA_PAPER_TRADE|PROVOST_TOKEN)=' .env)"
     chmod 700 "$PROVOST_SECRETS_DIR"
-    printf '%s' "${ALPACA_API_KEY:-}" > "$PROVOST_SECRETS_DIR/alpaca_api_key"
-    chmod 600 "$PROVOST_SECRETS_DIR/alpaca_api_key"
-    printf '%s' "${ALPACA_SECRET_KEY:-}" > "$PROVOST_SECRETS_DIR/alpaca_secret_key"
-    chmod 600 "$PROVOST_SECRETS_DIR/alpaca_secret_key"
-    printf '%s' "${ALPACA_PAPER_TRADE:-true}" > "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
-    chmod 600 "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
+    write_secret_file "${ALPACA_API_KEY:-}" "$PROVOST_SECRETS_DIR/alpaca_api_key"
+    write_secret_file "${ALPACA_SECRET_KEY:-}" "$PROVOST_SECRETS_DIR/alpaca_secret_key"
+    write_secret_file "${ALPACA_PAPER_TRADE:-true}" "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
+    write_secret_file "${PROVOST_TOKEN:-dev-provost-token}" "$PROVOST_SECRETS_DIR/provost_token"
     
     # Output commands for caller to source
     echo "export PROVOST_SECRETS_DIR='$PROVOST_SECRETS_DIR'"
@@ -57,14 +63,13 @@ case "$MODE" in
     API_KEY="${ALPACA_API_KEY:-dummy}"
     SECRET_KEY="${ALPACA_SECRET_KEY:-dummy}"
     PAPER_TRADE="${ALPACA_PAPER_TRADE:-true}"
+    PROVOST_TOKEN_VALUE="${PROVOST_TOKEN:-dummy-provost-token}"
     
     chmod 700 "$PROVOST_SECRETS_DIR"
-    printf '%s' "$API_KEY" > "$PROVOST_SECRETS_DIR/alpaca_api_key"
-    chmod 600 "$PROVOST_SECRETS_DIR/alpaca_api_key"
-    printf '%s' "$SECRET_KEY" > "$PROVOST_SECRETS_DIR/alpaca_secret_key"
-    chmod 600 "$PROVOST_SECRETS_DIR/alpaca_secret_key"
-    printf '%s' "$PAPER_TRADE" > "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
-    chmod 600 "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
+    write_secret_file "$API_KEY" "$PROVOST_SECRETS_DIR/alpaca_api_key"
+    write_secret_file "$SECRET_KEY" "$PROVOST_SECRETS_DIR/alpaca_secret_key"
+    write_secret_file "$PAPER_TRADE" "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
+    write_secret_file "$PROVOST_TOKEN_VALUE" "$PROVOST_SECRETS_DIR/provost_token"
     
     echo "export PROVOST_SECRETS_DIR='$PROVOST_SECRETS_DIR'"
     echo "trap \"rm -rf '$PROVOST_SECRETS_DIR'\" EXIT"
@@ -92,13 +97,17 @@ case "$MODE" in
     API_KEY=$(printf '%s' "$SECRET_JSON" | grep -o '"ALPACA_API_KEY":"[^"]*' | cut -d'"' -f4 || echo "")
     SECRET_KEY=$(printf '%s' "$SECRET_JSON" | grep -o '"ALPACA_SECRET_KEY":"[^"]*' | cut -d'"' -f4 || echo "")
     PAPER_TRADE=$(printf '%s' "$SECRET_JSON" | grep -o '"ALPACA_PAPER_TRADE":"[^"]*' | cut -d'"' -f4 || echo "true")
+    PROVOST_TOKEN_VALUE=$(printf '%s' "$SECRET_JSON" | grep -o '"PROVOST_TOKEN":"[^"]*' | cut -d'"' -f4 || echo "")
+
+    if [ -z "$PROVOST_TOKEN_VALUE" ]; then
+      echo "echo '[bootstrap:ec2] ERROR: PROVOST_TOKEN missing from secret payload' >&2" >&2
+      exit 1
+    fi
     
-    printf '%s' "$API_KEY" > "$PROVOST_SECRETS_DIR/alpaca_api_key"
-    chmod 600 "$PROVOST_SECRETS_DIR/alpaca_api_key"
-    printf '%s' "$SECRET_KEY" > "$PROVOST_SECRETS_DIR/alpaca_secret_key"
-    chmod 600 "$PROVOST_SECRETS_DIR/alpaca_secret_key"
-    printf '%s' "$PAPER_TRADE" > "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
-    chmod 600 "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
+    write_secret_file "$API_KEY" "$PROVOST_SECRETS_DIR/alpaca_api_key"
+    write_secret_file "$SECRET_KEY" "$PROVOST_SECRETS_DIR/alpaca_secret_key"
+    write_secret_file "$PAPER_TRADE" "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
+    write_secret_file "$PROVOST_TOKEN_VALUE" "$PROVOST_SECRETS_DIR/provost_token"
     
     echo "export PROVOST_SECRETS_DIR='$PROVOST_SECRETS_DIR'"
     echo "echo '[bootstrap:ec2] secrets staged in $PROVOST_SECRETS_DIR'"

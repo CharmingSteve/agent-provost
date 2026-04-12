@@ -116,7 +116,8 @@ Each entry captures:
 
 ### 1. Requirements
 - Docker and Docker Compose
-- Alpaca API Keys (Paper or Live) in a `.env` file
+- Alpaca API Keys (Paper or Live) in a `.env` file for local dev
+- A shared `PROVOST_TOKEN` in `.env` for local dev and integration auth
 
 ### 2. Run the Compliance Check
 Run the built-in verification script to spin up the stack, execute a test trade, and verify the logs:
@@ -138,11 +139,55 @@ The script:
 Log side effects are intentional. If you need to preserve existing logs, copy them out before running the script.
 
 ### 3. Manual Startup
+Before starting the stack locally, stage secrets from `.env`:
+
 ```bash
+eval "$(sh bootstrap.sh dev)"
 docker compose up -d --build
 ```
 
 Point your MCP clients to: `http://localhost:8088/mcp`
+
+Required client headers for Hop 1 auth:
+
+- `X-Provost-Token` (must match `/run/secrets/provost_token`)
+- `X-Provost-User` (human identity)
+- `X-Provost-Machine` (client machine identity)
+
+Example `mcp.json` server entry:
+
+```json
+{
+   "transport": "streamable-http",
+   "url": "http://localhost:8088/mcp",
+   "headers": {
+      "X-Provost-Token": "dev-provost-token-123",
+      "X-Provost-User": "alice@hedgefund.com",
+      "X-Provost-Machine": "TRADER-WIN11-01"
+   }
+}
+```
+
+For integration and EC2/production, `bootstrap.sh` also stages `provost_token` from runner env (`PROVOST_TOKEN`) or AWS Secrets Manager (`PROVOST_TOKEN` key in the JSON secret payload).
+
+---
+
+## 🧪 Testing Token Authentication
+
+Token authentication is validated across three levels:
+- **Configuration tests** (Lua/BATS): Verify token validation code and secret staging logic are present
+- **Permission tests** (BATS): Verify token files are staged with restrictive `600` permissions
+- **Runtime tests** (BATS): Requests with missing/invalid tokens are rejected with appropriate HTTP status codes
+
+Run token auth tests locally:
+
+```bash
+bats tests/shell/test_provost_token.bats  # 12 token auth validation tests
+bats tests/shell/                           # All 34 shell tests
+busted tests/lua/                            # All 103 Lua config tests
+```
+
+The CI pipeline runs all tests and gates deployment on successful auth and audit validation.
 
 ---
 
