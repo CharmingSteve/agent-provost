@@ -66,4 +66,22 @@ describe("proxy headers and routing (default.conf)", function()
         assert.truthy(conf:find('"resp_body"', 1, false))
     end)
 
+    it("records provost user in the log format", function()
+        assert.truthy(conf:find('"provost_user"', 1, false))
+    end)
+
+    it("records provost machine in the log format", function()
+        assert.truthy(conf:find('"provost_machine"', 1, false))
+    end)
+
+    it("enforces the inbound provost token", function()
+        assert.truthy(conf:find("MISSING_PROVOST_TOKEN", 1, true))
+        assert.truthy(conf:find("INVALID_PROVOST_TOKEN", 1, true))
+    end)
+
+    it("requires inbound user and machine identity headers", function()
+        assert.truthy(conf:find("MISSING_PROVOST_USER", 1, true))
+        assert.truthy(conf:find("MISSING_PROVOST_MACHINE", 1, true))
+    end)
+
 end)

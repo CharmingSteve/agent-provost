@@ -117,6 +117,7 @@ Each entry captures:
 ### 1. Requirements
 - Docker and Docker Compose
 - Alpaca API Keys (Paper or Live) in a `.env` file for local dev
+- A shared `PROVOST_TOKEN` in `.env` for local dev and integration auth
 
 ### 2. Run the Compliance Check
 Run the built-in verification script to spin up the stack, execute a test trade, and verify the logs:
@@ -146,6 +147,28 @@ docker compose up -d --build
 ```
 
 Point your MCP clients to: `http://localhost:8088/mcp`
+
+Required client headers for Hop 1 auth:
+
+- `X-Provost-Token` (must match `/run/secrets/provost_token`)
+- `X-Provost-User` (human identity)
+- `X-Provost-Machine` (client machine identity)
+
+Example `mcp.json` server entry:
+
+```json
+{
+   "transport": "streamable-http",
+   "url": "http://localhost:8088/mcp",
+   "headers": {
+      "X-Provost-Token": "dev-provost-token-123",
+      "X-Provost-User": "alice@hedgefund.com",
+      "X-Provost-Machine": "TRADER-WIN11-01"
+   }
+}
+```
+
+For integration and EC2/production, `bootstrap.sh` also stages `provost_token` from runner env (`PROVOST_TOKEN`) or AWS Secrets Manager (`PROVOST_TOKEN` key in the JSON secret payload).
 
 ---
 

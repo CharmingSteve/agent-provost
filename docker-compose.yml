@@ -39,6 +39,7 @@ services:
       - ./default.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
       - ./lua:/etc/nginx/lua:ro
       - ./rules.json:/etc/rules.json:ro
+      - ${PROVOST_SECRETS_DIR:-./.secrets}:/run/secrets:ro
       - ./nginx-logs:/data/nginx-logs
     networks:
       - mcp_internal

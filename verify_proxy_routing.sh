@@ -35,15 +35,33 @@ echo "[verify] clearing logs"
 echo "[verify] probing mcp endpoint"
 "$PYTHON_BIN" - <<'PY'
 import json
+import os
 import time
 import requests
 
 url = "http://localhost:8088/mcp"
 sid = None
+secrets_dir = os.environ.get("PROVOST_SECRETS_DIR", "/run/secrets")
+token_path = os.path.join(secrets_dir, "provost_token")
+
+try:
+    with open(token_path, "r", encoding="utf-8") as f:
+        provost_token = f.read().strip()
+except OSError as exc:
+    raise SystemExit(f"unable to read provost token from {token_path}: {exc}")
+
+if not provost_token:
+    raise SystemExit(f"provost token file is empty: {token_path}")
 
 def call(sess, rid, method, params=None):
     global sid
-    headers = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+    headers = {
+        "Accept": "application/json, text/event-stream",
+        "Content-Type": "application/json",
+        "X-Provost-Token": provost_token,
+        "X-Provost-User": os.environ.get("PROVOST_VERIFY_USER", "verify@local"),
+        "X-Provost-Machine": os.environ.get("PROVOST_VERIFY_MACHINE", "verify-runner"),
+    }
     if sid:
         headers["mcp-session-id"] = sid
     payload = {"jsonrpc": "2.0", "method": method}
