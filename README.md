@@ -46,8 +46,16 @@ If you want full traceability, these four events should be visible across the tw
 
 How they map:
 
-- `llm_to_alpaca_access.log`: steps 1 and 4
-- `mcp_to_alpaca_access.log`: steps 2 and 3
+- `llm_to_alpaca_access.log`: step 1 (LLM -> MCP) and step 4 (MCP -> LLM)
+- `mcp_to_alpaca_access.log`: step 2 (MCP -> Alpaca) and step 3 (Alpaca -> MCP)
+
+For normal authenticated trading traffic, both access logs should carry the same identity fields:
+
+- `provost_user` (for example `your.email@domain.com`)
+- `provost_machine` (for example `YOUR-MACHINE-NAME`)
+- `provost_request_id` (the request correlation id shared across hops)
+
+These values should be present and non-null for normal MCP trading flows so the four-hop audit trail can be correlated end to end.
 
 ---
 
@@ -107,8 +115,13 @@ Each entry captures:
 - `request` (Method/Path)
 - `status` (200, 403, etc.)
 - `body_bytes_sent`, `request_time`, `upstream_response_time`
+- `provost_request_id` (the correlation id shared across hops)
+- `provost_user` (the human/client identity from the MCP request headers)
+- `provost_machine` (the client machine identity from the MCP request headers)
 - `request_body` (The actual JSON sent by the AI)
 - `resp_body` (The actual JSON returned by the API)
+
+`provost_request_id` is created on Hop 1 when the inbound request is validated. If the client already supplied `X-Provost-Request-Id`, the proxy reuses it; otherwise Hop 1 generates one from `request_id` or a timestamp-random fallback, stores the identity context in shared memory, and forwards the same id downstream so Hop 2 can recover and log the same correlation id.
 
 ---
 
@@ -120,7 +133,7 @@ Each entry captures:
 - A shared `PROVOST_TOKEN` in `.env` for local dev and integration auth
 
 ### 2. Run the Compliance Check
-Run the built-in verification script to spin up the stack, execute a test trade, and verify the logs:
+Run the built-in verification script to spin up the stack, execute an MCP initialize + get_account_info probe, and verify the logs:
 
 ```bash
 sh agent-provost/verify_proxy_routing.sh
@@ -136,6 +149,8 @@ The script:
    - hop 2 access log has fresh lines
    - hop 2 error log is empty
 
+After verification, inspect `llm_to_alpaca_access.log` and `mcp_to_alpaca_access.log` and confirm recent authenticated entries contain the same `provost_user`, `provost_machine`, and `provost_request_id` values across both hops.
+
 Log side effects are intentional. If you need to preserve existing logs, copy them out before running the script.
 
 ### 3. Manual Startup
@@ -146,13 +161,17 @@ eval "$(sh bootstrap.sh dev)"
 docker compose up -d --build
 ```
 
+`bootstrap.sh dev` stages `.env` secrets into a temporary directory and exports `PROVOST_SECRETS_DIR`; `docker compose` then mounts that directory into `/run/secrets` in both containers. If you change `.env`, restart the bootstrap step and recreate the compose stack so the mounted `provost_token` still matches your MCP client configuration.
+
 Point your MCP clients to: `http://localhost:8088/mcp`
 
 Required client headers for Hop 1 auth:
 
 - `X-Provost-Token` (must match `/run/secrets/provost_token`)
-- `X-Provost-User` (human identity)
-- `X-Provost-Machine` (client machine identity)
+- `X-Provost-User` (human identity; for example `your.email@domain.com`)
+- `X-Provost-Machine` (client machine identity; for example `YOUR-MACHINE-NAME`)
+
+Do not set `X-Provost-Request-Id` manually in `mcp.json` unless you have a specific reason to supply your own correlation id. In the normal flow, Agent Provost creates and forwards that id automatically.
 
 Example `mcp.json` server entry:
 
@@ -162,8 +181,8 @@ Example `mcp.json` server entry:
    "url": "http://localhost:8088/mcp",
    "headers": {
       "X-Provost-Token": "dev-provost-token-123",
-      "X-Provost-User": "alice@hedgefund.com",
-      "X-Provost-Machine": "TRADER-WIN11-01"
+      "X-Provost-User": "your.email@domain.com",
+      "X-Provost-Machine": "YOUR-MACHINE-NAME"
    }
 }
 ```

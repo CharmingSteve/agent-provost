@@ -70,6 +70,21 @@ end
 function _M.check_request(parsed, rules)
     rules = rules or {}
 
+local function normalize_notional(args)
+    if type(args) ~= "table" then
+        return nil
+    end
+    return tonumber(args.notional)
+end
+
+local function normalize_limit_price(args)
+    if type(args) ~= "table" then
+        return nil
+    end
+    return tonumber(args.limit_price)
+end
+
+-- check_request evaluates a decoded request body against the rules table.
     -- No parseable body or wrong shape: pass through.
     if not parsed
        or type(parsed.params) ~= "table"
@@ -98,8 +113,26 @@ function _M.check_request(parsed, rules)
                 "PROVOST_INTERVENTION: Risk Limit Exceeded. " ..
                 "Attempted trade size too large. Blocked to protect capital."
         end
-    end
 
+        -- Check for notional (dollar-based) orders
+        local notional = normalize_notional(args)
+        if notional ~= nil and notional > 0 then
+            local limit_price = normalize_limit_price(args)
+            if limit_price ~= nil and limit_price > 0 then
+                local estimated_qty = notional / limit_price
+                if estimated_qty > limit then
+                    return true,
+                        "PROVOST_INTERVENTION: Risk Limit Exceeded. " ..
+                        "Notional order estimated at " .. string.format("%.2f", estimated_qty) ..
+                        " shares exceeds limit of " .. limit .. "."
+                end
+            else
+                return true,
+                    "PROVOST_INTERVENTION: Risk Limit Exceeded. " ..
+                    "Notional orders require limit_price for safe evaluation."
+            end
+        end
+    end
     -- ----------------------------------------------------------------
     -- Rule: blocked_tool_names
     -- Blocks requests whose tool name is explicitly restricted.
