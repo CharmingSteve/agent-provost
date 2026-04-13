@@ -133,7 +133,7 @@ Each entry captures:
 - A shared `PROVOST_TOKEN` in `.env` for local dev and integration auth
 
 ### 2. Run the Compliance Check
-Run the built-in verification script to spin up the stack, execute a test trade, and verify the logs:
+Run the built-in verification script to spin up the stack, execute an MCP initialize + get_account_info probe, and verify the logs:
 
 ```bash
 sh agent-provost/verify_proxy_routing.sh
