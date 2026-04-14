@@ -9,6 +9,7 @@ Stop your AI agent from going rogue with programmable risk guardrails and a tamp
 ## 🚀 Key Features for AI Safety & Compliance
 
 *   **Programmable Circuit Breaker (Risk Kill-Switch):** Built-in Lua logic that intercepts and blocks high-risk orders. (Default: Blocks any trade quantity > 100).
+*   **Upstream Rate-Limit Guardrails:** Automatically blocks new inbound requests for 60 seconds after an upstream `429`, and preemptively blocks when upstream `RateLimit-Remaining` is below threshold.
 *   **Two-Hop Observability:** Full visibility into both the LLM-to-MCP and MCP-to-Alpaca communication channels.
 *   **Zero-Trust Audit Ledger:** Every request and response body is captured in structured JSON logs for forensic analysis and compliance.
 *   **Runtime Source Patching:** Unique `entrypoint.sh` technology that hot-patches the `alpaca-mcp-server` at runtime to support proxy routing without needing a custom fork.
@@ -78,8 +79,10 @@ See [`RULES_ENGINE.md`](RULES_ENGINE.md) for full documentation: JSON structure,
 | `blocked_tool_names` | disabled | Optional: block named trade tools regardless of argument syntax |
 | `restricted_ticker_tool_rules` | **enabled**, list = GME/AMC/BBBY | Blocks restricted symbols when used by specific order tools |
 | `trading_window` | disabled | Placeholder: restrict trading to specific UTC hours |
+| `upstream_429_cooldown` | **enabled**, 60s | Blocks all inbound traffic with `429` while cooldown is active after upstream `429` |
+| `upstream_remaining_guard` | **enabled**, threshold = 10 | Blocks inbound traffic with `429` when upstream remaining quota falls below threshold |
 
-All blocked requests return `403 Forbidden` with a `PROVOST_INTERVENTION` JSON error body.
+Blocked requests return either `403 Forbidden` (`PROVOST_INTERVENTION`) for policy violations or `429 Too Many Requests` for upstream-protection guardrails.
 
 ### Live Rule Update Example (no restart)
 
@@ -193,10 +196,10 @@ For integration and EC2/production, `bootstrap.sh` also stages `provost_token` f
 
 ## 🧪 Testing Token Authentication
 
-Token authentication is validated across three levels:
-- **Configuration tests** (Lua/BATS): Verify token validation code and secret staging logic are present
+Token authentication and rate-limit protection are validated across three levels:
+- **Configuration tests** (Lua/BATS): Verify token validation code, rate-limit guard logic, and secret staging logic are present
 - **Permission tests** (BATS): Verify token files are staged with restrictive `600` permissions
-- **Runtime tests** (BATS): Requests with missing/invalid tokens are rejected with appropriate HTTP status codes
+- **Runtime tests** (BATS/Lua): Requests with missing/invalid tokens are rejected, and rate-limit cooldown/remaining logic is enforced
 
 Run token auth tests locally:
 
