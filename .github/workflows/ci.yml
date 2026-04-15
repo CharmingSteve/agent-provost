@@ -145,7 +145,7 @@ jobs:
           trivy_openresty_status=$?
           cat /tmp/trivy-openresty.txt
           echo "TRIVY_OPENRESTY_STATUS=${trivy_openresty_status}" >> "$GITHUB_ENV"
-          TRIVY_OPENRESTY_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]+" /tmp/trivy-openresty.txt | sort -u | paste -sd, -)"
+          TRIVY_OPENRESTY_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]{4,}" /tmp/trivy-openresty.txt | sort -u | paste -sd, -)"
           echo "TRIVY_OPENRESTY_CVES=${TRIVY_OPENRESTY_CVES:-none-found}" >> "$GITHUB_ENV"
           trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-openresty.json openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50 >/dev/null 2>&1 || true
       - name: Trivy image scan (alpaca-mcp build output)
@@ -156,11 +156,12 @@ jobs:
           trivy_alpaca_status=$?
           cat /tmp/trivy-alpaca-mcp.txt
           echo "TRIVY_ALPACA_MCP_STATUS=${trivy_alpaca_status}" >> "$GITHUB_ENV"
-          TRIVY_ALPACA_MCP_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]+" /tmp/trivy-alpaca-mcp.txt | sort -u | paste -sd, -)"
+          TRIVY_ALPACA_MCP_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]{4,}" /tmp/trivy-alpaca-mcp.txt | sort -u | paste -sd, -)"
           echo "TRIVY_ALPACA_MCP_CVES=${TRIVY_ALPACA_MCP_CVES:-none-found}" >> "$GITHUB_ENV"
           trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-alpaca-mcp.json "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}" >/dev/null 2>&1 || true
       - name: Fail if any Trivy scan failed
         run: |
+          JQ_CVE='.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL") | "  [\(.Severity)] \(.VulnerabilityID)\n    Package: \(.PkgName) \(.InstalledVersion)  Fix: \(.FixedVersion // "no fix available")\n    Title:   \(.Title // ((.Description // "")[0:120]) // "no title")\n    NVD:     https://nvd.nist.gov/vuln/detail/\(.VulnerabilityID)"'
           # Mock harness images are demo-only and excluded from gate
           failed=0
           if [ "${TRIVY_FS_STATUS:-0}" -ne 0 ]; then
@@ -170,16 +171,12 @@ jobs:
           if [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ]; then
             failed=1
             echo "::error title=Trivy scan failed::Image openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50 has HIGH/CRITICAL CVEs: ${TRIVY_OPENRESTY_CVES:-unavailable}"
-            if [ -f /tmp/trivy-openresty.json ]; then
-              jq -r '.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL") | "  [\(.Severity)] \(.VulnerabilityID)\n    Package: \(.PkgName) \(.InstalledVersion)  Fix: \(.FixedVersion // "no fix available")\n    Title:   \(.Title // ((.Description // "")[0:120]) // "no title")\n    NVD:     https://nvd.nist.gov/vuln/detail/\(.VulnerabilityID)"' /tmp/trivy-openresty.json 2>/dev/null || true
-            fi
+            [ -f /tmp/trivy-openresty.json ] && jq -r "$JQ_CVE" /tmp/trivy-openresty.json 2>/dev/null || true
           fi
           if [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
             failed=1
             echo "::error title=Trivy scan failed::Image agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG} has HIGH/CRITICAL CVEs: ${TRIVY_ALPACA_MCP_CVES:-unavailable}"
-            if [ -f /tmp/trivy-alpaca-mcp.json ]; then
-              jq -r '.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL") | "  [\(.Severity)] \(.VulnerabilityID)\n    Package: \(.PkgName) \(.InstalledVersion)  Fix: \(.FixedVersion // "no fix available")\n    Title:   \(.Title // ((.Description // "")[0:120]) // "no title")\n    NVD:     https://nvd.nist.gov/vuln/detail/\(.VulnerabilityID)"' /tmp/trivy-alpaca-mcp.json 2>/dev/null || true
-            fi
+            [ -f /tmp/trivy-alpaca-mcp.json ] && jq -r "$JQ_CVE" /tmp/trivy-alpaca-mcp.json 2>/dev/null || true
           fi
           if [ "${failed}" -ne 0 ]; then
             echo "One or more Trivy scans failed."
@@ -324,7 +321,7 @@ jobs:
           trivy_openresty_status=$?
           cat /tmp/trivy-openresty.txt
           echo "TRIVY_OPENRESTY_STATUS=${trivy_openresty_status}" >> "$GITHUB_ENV"
-          TRIVY_OPENRESTY_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]+" /tmp/trivy-openresty.txt | sort -u | paste -sd, -)"
+          TRIVY_OPENRESTY_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]{4,}" /tmp/trivy-openresty.txt | sort -u | paste -sd, -)"
           echo "TRIVY_OPENRESTY_CVES=${TRIVY_OPENRESTY_CVES:-none-found}" >> "$GITHUB_ENV"
           trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-openresty.json openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50 >/dev/null 2>&1 || true
       - name: Step 5 (Security Tests) - Trivy image scan (alpaca-mcp build output)
@@ -335,7 +332,7 @@ jobs:
           trivy_alpaca_status=$?
           cat /tmp/trivy-alpaca-mcp.txt
           echo "TRIVY_ALPACA_MCP_STATUS=${trivy_alpaca_status}" >> "$GITHUB_ENV"
-          TRIVY_ALPACA_MCP_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]+" /tmp/trivy-alpaca-mcp.txt | sort -u | paste -sd, -)"
+          TRIVY_ALPACA_MCP_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]{4,}" /tmp/trivy-alpaca-mcp.txt | sort -u | paste -sd, -)"
           echo "TRIVY_ALPACA_MCP_CVES=${TRIVY_ALPACA_MCP_CVES:-none-found}" >> "$GITHUB_ENV"
           trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-alpaca-mcp.json "public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}" >/dev/null 2>&1 || true
       - name: Step 5 (Sanity/Integration Tests)
@@ -348,6 +345,7 @@ jobs:
       - name: Step 6 (Security Gate) - Fail if any Trivy scan failed
         if: always()
         run: |
+          JQ_CVE='.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL") | "  [\(.Severity)] \(.VulnerabilityID)\n    Package: \(.PkgName) \(.InstalledVersion)  Fix: \(.FixedVersion // "no fix available")\n    Title:   \(.Title // ((.Description // "")[0:120]) // "no title")\n    NVD:     https://nvd.nist.gov/vuln/detail/\(.VulnerabilityID)"'
           # Mock harness images are demo-only and excluded from gate
           failed=0
           if [ "${TRIVY_FS_STATUS:-0}" -ne 0 ]; then
@@ -357,16 +355,12 @@ jobs:
           if [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ]; then
             failed=1
             echo "::error title=Trivy scan failed::Image openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50 has HIGH/CRITICAL CVEs: ${TRIVY_OPENRESTY_CVES:-unavailable}"
-            if [ -f /tmp/trivy-openresty.json ]; then
-              jq -r '.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL") | "  [\(.Severity)] \(.VulnerabilityID)\n    Package: \(.PkgName) \(.InstalledVersion)  Fix: \(.FixedVersion // "no fix available")\n    Title:   \(.Title // ((.Description // "")[0:120]) // "no title")\n    NVD:     https://nvd.nist.gov/vuln/detail/\(.VulnerabilityID)"' /tmp/trivy-openresty.json 2>/dev/null || true
-            fi
+            [ -f /tmp/trivy-openresty.json ] && jq -r "$JQ_CVE" /tmp/trivy-openresty.json 2>/dev/null || true
           fi
           if [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
             failed=1
             echo "::error title=Trivy scan failed::Image public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG} has HIGH/CRITICAL CVEs: ${TRIVY_ALPACA_MCP_CVES:-unavailable}"
-            if [ -f /tmp/trivy-alpaca-mcp.json ]; then
-              jq -r '.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL") | "  [\(.Severity)] \(.VulnerabilityID)\n    Package: \(.PkgName) \(.InstalledVersion)  Fix: \(.FixedVersion // "no fix available")\n    Title:   \(.Title // ((.Description // "")[0:120]) // "no title")\n    NVD:     https://nvd.nist.gov/vuln/detail/\(.VulnerabilityID)"' /tmp/trivy-alpaca-mcp.json 2>/dev/null || true
-            fi
+            [ -f /tmp/trivy-alpaca-mcp.json ] && jq -r "$JQ_CVE" /tmp/trivy-alpaca-mcp.json 2>/dev/null || true
           fi
           if [ "${failed}" -ne 0 ]; then
             echo "One or more Trivy scans failed."
