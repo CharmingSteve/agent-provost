@@ -27,7 +27,11 @@ services:
     restart: unless-stopped
 
   agent-provost:
-    image: openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50
+    # Pinned digest from OpenResty tag: openresty/openresty:1.29.2.3-alpine
+    # (multi-arch index for linux/amd64 + linux/arm64; image labels show resty_version=1.29.2.3).
+    # Note: this tag can move over time, so always copy the digest for the exact tag/revision you want.
+    # Example: docker manifest inspect openresty/openresty:1.29.2.3-alpine --verbose
+    image: openresty/openresty@sha256:589a5b1396643da5fcf92b11b69a5a0c54ac7033b38c30d02f6598dd4cd4db60
     container_name: agent-provost
     depends_on:
       - alpaca-mcp
