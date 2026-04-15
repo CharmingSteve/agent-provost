@@ -141,18 +141,35 @@ jobs:
       - name: Trivy image scan (agent-provost)
         run: |
           set +e
-          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50
-          echo "TRIVY_OPENRESTY_STATUS=$?" >> "$GITHUB_ENV"
+          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50 | tee /tmp/trivy-openresty.txt
+          echo "TRIVY_OPENRESTY_STATUS=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
+          OPENRESTY_CVES="$(grep -oE 'CVE-[0-9]{4}-[0-9]+' /tmp/trivy-openresty.txt | sort -u | paste -sd, -)"
+          echo "TRIVY_OPENRESTY_CVES=${OPENRESTY_CVES:-none-found}" >> "$GITHUB_ENV"
       - name: Trivy image scan (alpaca-mcp build output)
         run: |
           set +e
           docker image inspect "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}" >/dev/null
-          trivy image --exit-code 1 --severity CRITICAL,HIGH "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}"
-          echo "TRIVY_ALPACA_MCP_STATUS=$?" >> "$GITHUB_ENV"
+          trivy image --exit-code 1 --severity CRITICAL,HIGH "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}" | tee /tmp/trivy-alpaca-mcp.txt
+          echo "TRIVY_ALPACA_MCP_STATUS=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
+          ALPACA_CVES="$(grep -oE 'CVE-[0-9]{4}-[0-9]+' /tmp/trivy-alpaca-mcp.txt | sort -u | paste -sd, -)"
+          echo "TRIVY_ALPACA_MCP_CVES=${ALPACA_CVES:-none-found}" >> "$GITHUB_ENV"
       - name: Fail if any Trivy scan failed
         run: |
           # Mock harness images are demo-only and excluded from gate
-          if [ "${TRIVY_FS_STATUS:-0}" -ne 0 ] || [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ] || [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
+          failed=0
+          if [ "${TRIVY_FS_STATUS:-0}" -ne 0 ]; then
+            failed=1
+            echo "::error title=Trivy scan failed::Filesystem scan has HIGH/CRITICAL findings."
+          fi
+          if [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ]; then
+            failed=1
+            echo "::error title=Trivy scan failed::Image openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50 has HIGH/CRITICAL CVEs: ${TRIVY_OPENRESTY_CVES:-unavailable}"
+          fi
+          if [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
+            failed=1
+            echo "::error title=Trivy scan failed::Image agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG} has HIGH/CRITICAL CVEs: ${TRIVY_ALPACA_MCP_CVES:-unavailable}"
+          fi
+          if [ "${failed}" -ne 0 ]; then
             echo "One or more Trivy scans failed."
             exit 1
           fi
@@ -291,14 +308,18 @@ jobs:
       - name: Step 5 (Security Tests) - Trivy image scan (agent-provost)
         run: |
           set +e
-          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50
-          echo "TRIVY_OPENRESTY_STATUS=$?" >> "$GITHUB_ENV"
+          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50 | tee /tmp/trivy-openresty.txt
+          echo "TRIVY_OPENRESTY_STATUS=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
+          OPENRESTY_CVES="$(grep -oE 'CVE-[0-9]{4}-[0-9]+' /tmp/trivy-openresty.txt | sort -u | paste -sd, -)"
+          echo "TRIVY_OPENRESTY_CVES=${OPENRESTY_CVES:-none-found}" >> "$GITHUB_ENV"
       - name: Step 5 (Security Tests) - Trivy image scan (alpaca-mcp build output)
         run: |
           set +e
           docker image inspect "public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}" >/dev/null
-          trivy image --exit-code 1 --severity CRITICAL,HIGH "public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}"
-          echo "TRIVY_ALPACA_MCP_STATUS=$?" >> "$GITHUB_ENV"
+          trivy image --exit-code 1 --severity CRITICAL,HIGH "public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}" | tee /tmp/trivy-alpaca-mcp.txt
+          echo "TRIVY_ALPACA_MCP_STATUS=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
+          ALPACA_CVES="$(grep -oE 'CVE-[0-9]{4}-[0-9]+' /tmp/trivy-alpaca-mcp.txt | sort -u | paste -sd, -)"
+          echo "TRIVY_ALPACA_MCP_CVES=${ALPACA_CVES:-none-found}" >> "$GITHUB_ENV"
       - name: Step 5 (Sanity/Integration Tests)
         run: |
           set -euo pipefail
@@ -310,7 +331,20 @@ jobs:
         if: always()
         run: |
           # Mock harness images are demo-only and excluded from gate
-          if [ "${TRIVY_FS_STATUS:-0}" -ne 0 ] || [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ] || [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
+          failed=0
+          if [ "${TRIVY_FS_STATUS:-0}" -ne 0 ]; then
+            failed=1
+            echo "::error title=Trivy scan failed::Filesystem scan has HIGH/CRITICAL findings."
+          fi
+          if [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ]; then
+            failed=1
+            echo "::error title=Trivy scan failed::Image openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50 has HIGH/CRITICAL CVEs: ${TRIVY_OPENRESTY_CVES:-unavailable}"
+          fi
+          if [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
+            failed=1
+            echo "::error title=Trivy scan failed::Image public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG} has HIGH/CRITICAL CVEs: ${TRIVY_ALPACA_MCP_CVES:-unavailable}"
+          fi
+          if [ "${failed}" -ne 0 ]; then
             echo "One or more Trivy scans failed."
             exit 1
           fi
