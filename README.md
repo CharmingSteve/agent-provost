@@ -144,7 +144,7 @@ sh agent-provost/verify_proxy_routing.sh
 
 The script:
 
-1. Recreates the entire compose stack (`docker compose up -d --force-recreate`)
+1. Recreates the entire compose stack (`docker compose --env-file .env.versions up -d --force-recreate`)
 2. Truncates all four log files to zero before probing
 3. Runs initialize + get_account_info through localhost:8088/mcp
 4. Fails unless:
@@ -161,7 +161,7 @@ Before starting the stack locally, stage secrets from `.env`:
 
 ```bash
 eval "$(sh bootstrap.sh dev)"
-docker compose up -d --build
+docker compose --env-file .env.versions up -d --build
 ```
 
 `bootstrap.sh dev` stages `.env` secrets into a temporary directory and exports `PROVOST_SECRETS_DIR`; `docker compose` then mounts that directory into `/run/secrets` in both containers. If you change `.env`, restart the bootstrap step and recreate the compose stack so the mounted `provost_token` still matches your MCP client configuration.

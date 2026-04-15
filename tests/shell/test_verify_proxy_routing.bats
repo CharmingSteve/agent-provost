@@ -64,3 +64,8 @@ EOF
   run env PATH="$TMPDIR/bin:$PATH" ROOT_DIR="$TMPDIR" PROJECT_DIR="$TMPDIR" LOG_DIR="$TMPDIR/nginx-logs" sh "$TMPDIR/verify_proxy_routing.sh"
   [ "$status" -ne 0 ]
 }
+
+@test "verify_proxy_routing.sh passes --env-file to docker compose" {
+  run grep -E 'COMPOSE_ENV_FILE|--env-file' "$TEST_REPO_ROOT/verify_proxy_routing.sh"
+  [ "$status" -eq 0 ]
+}

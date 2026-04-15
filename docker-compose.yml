@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: alpaca-mcp.Dockerfile
+      args:
+        BASE_PYTHON_IMAGE: ${BASE_PYTHON_IMAGE}
     image: agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG:-latest}
     container_name: alpaca-mcp
     volumes:
@@ -31,7 +33,8 @@ services:
     # (multi-arch index for linux/amd64 + linux/arm64; image labels show resty_version=1.29.2.3).
     # Note: this tag can move over time, so always copy the digest for the exact tag/revision you want.
     # Example: docker manifest inspect openresty/openresty:1.29.2.3-alpine --verbose
-    image: openresty/openresty@sha256:589a5b1396643da5fcf92b11b69a5a0c54ac7033b38c30d02f6598dd4cd4db60
+    # Digest is sourced from .env.versions via: docker compose --env-file .env.versions ...
+    image: ${OPENRESTY_IMAGE}
     container_name: agent-provost
     depends_on:
       - alpaca-mcp

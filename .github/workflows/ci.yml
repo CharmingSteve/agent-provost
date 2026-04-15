@@ -115,11 +115,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set short commit tag for alpaca image
         run: echo "ALPACA_IMAGE_TAG=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
+      - name: Load image versions from .env.versions
+        run: grep -v '^#' .env.versions | grep -v '^$' >> "$GITHUB_ENV"
       - name: Stage dummy secrets for compose parsing
         run: |
           eval "$(sh bootstrap.sh runner)"
       - name: Validate docker compose spec
-        run: docker compose -f docker-compose.yml config --quiet
+        run: docker compose --env-file .env.versions -f docker-compose.yml config --quiet
       - name: Install Trivy
         run: |
           curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
@@ -136,18 +138,18 @@ jobs:
       - name: Pull and build images for scan
         run: |
           set -euo pipefail
-          docker compose -f docker-compose.yml pull agent-provost
-          docker compose -f docker-compose.yml build alpaca-mcp
+          docker compose --env-file .env.versions -f docker-compose.yml pull agent-provost
+          docker compose --env-file .env.versions -f docker-compose.yml build alpaca-mcp
       - name: Trivy image scan (agent-provost)
         run: |
           set +e
-          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50 > /tmp/trivy-openresty.txt 2>&1
+          trivy image --exit-code 1 --severity CRITICAL,HIGH "${OPENRESTY_IMAGE}" > /tmp/trivy-openresty.txt 2>&1
           trivy_openresty_status=$?
           cat /tmp/trivy-openresty.txt
           echo "TRIVY_OPENRESTY_STATUS=${trivy_openresty_status}" >> "$GITHUB_ENV"
           TRIVY_OPENRESTY_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]{4,}" /tmp/trivy-openresty.txt | sort -u | paste -sd, -)"
           echo "TRIVY_OPENRESTY_CVES=${TRIVY_OPENRESTY_CVES:-none-found}" >> "$GITHUB_ENV"
-          trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-openresty.json openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50 >/dev/null 2>&1 || true
+          trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-openresty.json "${OPENRESTY_IMAGE}" >/dev/null 2>&1 || true
       - name: Trivy image scan (alpaca-mcp build output)
         run: |
           set +e
@@ -170,7 +172,7 @@ jobs:
           fi
           if [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ]; then
             failed=1
-            echo "::error title=Trivy scan failed::Image openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50 has HIGH/CRITICAL CVEs: ${TRIVY_OPENRESTY_CVES:-unavailable}"
+            echo "::error title=Trivy scan failed::Image ${OPENRESTY_IMAGE} has HIGH/CRITICAL CVEs: ${TRIVY_OPENRESTY_CVES:-unavailable}"
             [ -f /tmp/trivy-openresty.json ] && jq -r "$JQ_CVE" /tmp/trivy-openresty.json 2>/dev/null || true
           fi
           if [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
@@ -273,6 +275,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set image tags
         run: echo "IMAGE_SHA_TAG=${GITHUB_SHA}" >> "$GITHUB_ENV"
+      - name: Load image versions from .env.versions
+        run: grep -v '^#' .env.versions | grep -v '^$' >> "$GITHUB_ENV"
       - name: Stage dummy secrets for build
         run: |
           eval "$(sh bootstrap.sh runner)"
@@ -280,6 +284,7 @@ jobs:
         run: |
           set -euo pipefail
           docker build -f alpaca-mcp.Dockerfile \
+            --build-arg BASE_PYTHON_IMAGE=${BASE_PYTHON_IMAGE} \
             -t public.ecr.aws/e2u9m9o7/agent-provost:latest \
             -t public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG} .
       - name: Step 2 (Authenticate to AWS)
@@ -313,17 +318,17 @@ jobs:
       - name: Step 5 (Security Tests) - Pull and build additional images for scan
         run: |
           set -euo pipefail
-          docker compose -f docker-compose.yml pull agent-provost
+          docker compose --env-file .env.versions -f docker-compose.yml pull agent-provost
       - name: Step 5 (Security Tests) - Trivy image scan (agent-provost)
         run: |
           set +e
-          trivy image --exit-code 1 --severity CRITICAL,HIGH openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50 > /tmp/trivy-openresty.txt 2>&1
+          trivy image --exit-code 1 --severity CRITICAL,HIGH "${OPENRESTY_IMAGE}" > /tmp/trivy-openresty.txt 2>&1
           trivy_openresty_status=$?
           cat /tmp/trivy-openresty.txt
           echo "TRIVY_OPENRESTY_STATUS=${trivy_openresty_status}" >> "$GITHUB_ENV"
           TRIVY_OPENRESTY_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]{4,}" /tmp/trivy-openresty.txt | sort -u | paste -sd, -)"
           echo "TRIVY_OPENRESTY_CVES=${TRIVY_OPENRESTY_CVES:-none-found}" >> "$GITHUB_ENV"
-          trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-openresty.json openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50 >/dev/null 2>&1 || true
+          trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-openresty.json "${OPENRESTY_IMAGE}" >/dev/null 2>&1 || true
       - name: Step 5 (Security Tests) - Trivy image scan (alpaca-mcp build output)
         run: |
           set +e
@@ -338,7 +343,7 @@ jobs:
       - name: Step 5 (Sanity/Integration Tests)
         run: |
           set -euo pipefail
-          docker compose up -d
+          docker compose --env-file .env.versions up -d
           sudo apt-get update -q
           sudo apt-get install -y bats
           bats tests/shell/
@@ -354,7 +359,7 @@ jobs:
           fi
           if [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ]; then
             failed=1
-            echo "::error title=Trivy scan failed::Image openresty/openresty@sha256:4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50 has HIGH/CRITICAL CVEs: ${TRIVY_OPENRESTY_CVES:-unavailable}"
+            echo "::error title=Trivy scan failed::Image ${OPENRESTY_IMAGE} has HIGH/CRITICAL CVEs: ${TRIVY_OPENRESTY_CVES:-unavailable}"
             [ -f /tmp/trivy-openresty.json ] && jq -r "$JQ_CVE" /tmp/trivy-openresty.json 2>/dev/null || true
           fi
           if [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
@@ -368,4 +373,4 @@ jobs:
           fi
       - name: Tear down compose stack
         if: always()
-        run: docker compose down -v --remove-orphans
+        run: docker compose --env-file .env.versions down -v --remove-orphans
