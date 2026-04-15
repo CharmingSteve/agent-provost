@@ -172,7 +172,7 @@ Blocks requests that use a specific trade tool and a restricted ticker symbol, e
 
 ```bash
 # Start the stack
-docker compose up -d
+docker compose --env-file .env.versions up -d
 
 # Check that a large trade is blocked
 curl -s -X POST http://localhost:8088/mcp \

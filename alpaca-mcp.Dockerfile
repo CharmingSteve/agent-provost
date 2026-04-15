@@ -1,4 +1,7 @@
-FROM python:3.11-alpine@sha256:f07e2ace46f560f09a6eeec7b4913b80ee99546e749ef82342a419a326620856
+ARG BASE_PYTHON_IMAGE=python:3.11-alpine@sha256:f07e2ace46f560f09a6eeec7b4913b80ee99546e749ef82342a419a326620856
+# checkov:skip=CKV_DOCKER_7:base image is pinned to a digest via ARG default above
+# hadolint ignore=DL3006
+FROM ${BASE_PYTHON_IMAGE}
 
 RUN apk upgrade --no-cache \
 	&& pip install --no-cache-dir "uv==0.8.16" \

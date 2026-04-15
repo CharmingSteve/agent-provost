@@ -7,6 +7,7 @@ LOG_DIR="${LOG_DIR:-$ROOT_DIR/nginx-logs}"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_DIR/.venv/bin/python}"
 BOOTSTRAP_MODE="${BOOTSTRAP_MODE:-dev}"
+COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE:-.env.versions}"
 
 if [ ! -x "$PYTHON_BIN" ]; then
     PYTHON_BIN="python3"
@@ -24,7 +25,7 @@ else
 fi
 
 echo "[verify] restarting stack"
-"$DOCKER_BIN" compose up -d --force-recreate >/dev/null
+"$DOCKER_BIN" compose --env-file "$COMPOSE_ENV_FILE" up -d --force-recreate >/dev/null
 
 echo "[verify] clearing logs"
 : > "$LOG_DIR/llm_to_alpaca_access.log"
