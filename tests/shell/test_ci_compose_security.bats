@@ -30,3 +30,14 @@
   run grep -E -- '--soft-fail' .github/workflows/ci.yml
   [ "$status" -ne 0 ]
 }
+
+@test "CI security gate reports image and CVEs for Trivy failures" {
+  run grep -E 'TRIVY_OPENRESTY_CVES=' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'has HIGH/CRITICAL CVEs: \$\{TRIVY_OPENRESTY_CVES:-unavailable\}' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'TRIVY_ALPACA_MCP_CVES=' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'has HIGH/CRITICAL CVEs: \$\{TRIVY_ALPACA_MCP_CVES:-unavailable\}' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+}
