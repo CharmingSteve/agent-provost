@@ -1,19 +1,10 @@
 #!/bin/sh
-# bootstrap.sh: unified secrets staging for dev, runner, and EC2
-# This script stages secrets into an ephemeral directory and exports PROVOST_SECRETS_DIR.
-# The caller is responsible for cleanup if using temp directories.
-#
-# If PROVOST_SECRETS_DIR is already set and valid, this script reuses it.
-# Otherwise, based on MODE, it creates a new ephemeral directory.
-#
-# Usage:
-#   eval "$(./bootstrap.sh dev)"           # Outputs shell commands to export PROVOST_SECRETS_DIR
-#   eval "$(./bootstrap.sh runner)"        # With ALPACA_API_KEY, ALPACA_SECRET_KEY in environment
-#   eval "$(./bootstrap.sh ec2)"           # Fetches from AWS Secrets Manager
+# bootstrap.sh: unified secrets/runtime staging for dev, runner, and EC2
 
 set -e
 
 MODE="${1:-dev}"
+ENV_FILE=".env"
 
 write_secret_file() {
   value="$1"
@@ -22,97 +13,172 @@ write_secret_file() {
   chmod 600 "$path"
 }
 
-# Check if secrets are already staged
-if [ -n "${PROVOST_SECRETS_DIR:-}" ] && [ -d "$PROVOST_SECRETS_DIR" ] && \
-  [ -f "$PROVOST_SECRETS_DIR/alpaca_api_key" ] && [ -f "$PROVOST_SECRETS_DIR/alpaca_secret_key" ] && \
-  [ -f "$PROVOST_SECRETS_DIR/provost_token" ]; then
-  # Secrets already staged, just export the path
+env_get() {
+  key="$1"
+  file="$2"
+  awk -v k="$key" 'index($0, k "=") == 1 { print substr($0, length(k) + 2); found=1 } END { if (!found) exit 1 }' "$file"
+}
+
+emit_export_or_unset() {
+  key="$1"
+  value="$2"
+  if [ -n "$value" ]; then
+    echo "export $key='$value'"
+  else
+    echo "unset $key"
+  fi
+}
+
+create_secrets_dir() {
+  mode="$1"
+  if [ "$mode" = "ec2" ]; then
+    PROVOST_SECRETS_DIR="/run/provost-secrets"
+    mkdir -p "$PROVOST_SECRETS_DIR"
+  elif [ -z "${PROVOST_SECRETS_DIR:-}" ] || [ ! -d "$PROVOST_SECRETS_DIR" ]; then
+    PROVOST_SECRETS_DIR=$(mktemp -d)
+  fi
+  chmod 700 "$PROVOST_SECRETS_DIR"
+}
+
+create_run_dir() {
+  mode="$1"
+  if [ "$mode" = "ec2" ]; then
+    PROVOST_RUN_DIR="/run/provost"
+    mkdir -p "$PROVOST_RUN_DIR"
+  elif [ -z "${PROVOST_RUN_DIR:-}" ] || [ ! -d "$PROVOST_RUN_DIR" ]; then
+    PROVOST_RUN_DIR=$(mktemp -d)
+  fi
+  chmod 700 "$PROVOST_RUN_DIR"
+  rm -f "$PROVOST_RUN_DIR/fluent-bit.sock"
+}
+
+has_staged_secrets() {
+  [ -n "${PROVOST_SECRETS_DIR:-}" ] && [ -d "$PROVOST_SECRETS_DIR" ] && \
+    [ -f "$PROVOST_SECRETS_DIR/alpaca_api_key" ] && [ -f "$PROVOST_SECRETS_DIR/alpaca_secret_key" ] && \
+    [ -f "$PROVOST_SECRETS_DIR/provost_token" ]
+}
+
+if has_staged_secrets && [ -n "${PROVOST_RUN_DIR:-}" ] && [ -d "$PROVOST_RUN_DIR" ]; then
+  rm -f "$PROVOST_RUN_DIR/fluent-bit.sock"
   echo "export PROVOST_SECRETS_DIR='$PROVOST_SECRETS_DIR'"
-  echo "echo '[bootstrap] secrets already staged in $PROVOST_SECRETS_DIR'"
+  echo "export PROVOST_RUN_DIR='$PROVOST_RUN_DIR'"
+  echo "echo '[bootstrap] secrets/runtime already staged'"
   exit 0
 fi
 
 case "$MODE" in
   dev)
-    # DEV mode: read from local .env, copy to temp ephemeral dir
-    if [ ! -f .env ]; then
+    if [ ! -f "$ENV_FILE" ]; then
       echo "echo '[bootstrap:dev] ERROR: .env file not found' >&2" >&2
       exit 1
     fi
-    
-    PROVOST_SECRETS_DIR=$(mktemp -d)
-    
-    # Load .env and write secret files
-    eval "$(grep -E '^(ALPACA_API_KEY|ALPACA_SECRET_KEY|ALPACA_PAPER_TRADE|PROVOST_TOKEN)=' .env)"
-    chmod 700 "$PROVOST_SECRETS_DIR"
+
+    create_secrets_dir dev
+    create_run_dir dev
+
+    ALPACA_API_KEY=$(env_get ALPACA_API_KEY "$ENV_FILE" || true)
+    ALPACA_SECRET_KEY=$(env_get ALPACA_SECRET_KEY "$ENV_FILE" || true)
+    ALPACA_PAPER_TRADE=$(env_get ALPACA_PAPER_TRADE "$ENV_FILE" || true)
+    PROVOST_TOKEN_VALUE=$(env_get PROVOST_TOKEN "$ENV_FILE" || true)
+
+    AWS_REGION_VALUE=$(env_get AWS_REGION "$ENV_FILE" || true)
+    S3_BUCKET_VALUE=$(env_get S3_BUCKET "$ENV_FILE" || true)
+    AWS_ACCESS_KEY_ID_VALUE=$(env_get AWS_ACCESS_KEY_ID "$ENV_FILE" || true)
+    AWS_SECRET_ACCESS_KEY_VALUE=$(env_get AWS_SECRET_ACCESS_KEY "$ENV_FILE" || true)
+    AWS_SESSION_TOKEN_VALUE=$(env_get AWS_SESSION_TOKEN "$ENV_FILE" || true)
+    INSTANCE_ID_VALUE=$(env_get INSTANCE_ID "$ENV_FILE" || true)
+
     write_secret_file "${ALPACA_API_KEY:-}" "$PROVOST_SECRETS_DIR/alpaca_api_key"
     write_secret_file "${ALPACA_SECRET_KEY:-}" "$PROVOST_SECRETS_DIR/alpaca_secret_key"
     write_secret_file "${ALPACA_PAPER_TRADE:-true}" "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
-    write_secret_file "${PROVOST_TOKEN:-dev-provost-token}" "$PROVOST_SECRETS_DIR/provost_token"
-    
-    # Output commands for caller to source
+    write_secret_file "${PROVOST_TOKEN_VALUE:-dev-provost-token}" "$PROVOST_SECRETS_DIR/provost_token"
+
     echo "export PROVOST_SECRETS_DIR='$PROVOST_SECRETS_DIR'"
-    echo "trap \"rm -rf '$PROVOST_SECRETS_DIR'\" EXIT"
-    echo "echo '[bootstrap:dev] secrets staged in $PROVOST_SECRETS_DIR'"
+    echo "export PROVOST_RUN_DIR='$PROVOST_RUN_DIR'"
+    emit_export_or_unset AWS_REGION "$AWS_REGION_VALUE"
+    emit_export_or_unset S3_BUCKET "$S3_BUCKET_VALUE"
+    emit_export_or_unset AWS_ACCESS_KEY_ID "$AWS_ACCESS_KEY_ID_VALUE"
+    emit_export_or_unset AWS_SECRET_ACCESS_KEY "$AWS_SECRET_ACCESS_KEY_VALUE"
+    emit_export_or_unset AWS_SESSION_TOKEN "$AWS_SESSION_TOKEN_VALUE"
+    if [ -n "$INSTANCE_ID_VALUE" ]; then
+      echo "export INSTANCE_ID='$INSTANCE_ID_VALUE'"
+    else
+      echo "export INSTANCE_ID='local-dev'"
+    fi
+    echo "trap \"rm -rf '$PROVOST_SECRETS_DIR' '$PROVOST_RUN_DIR'\" EXIT"
+    echo "echo '[bootstrap:dev] staged secrets/runtime dirs'"
     ;;
-  
+
   runner)
-    # RUNNER mode: use env vars (GitHub Secrets or dummy) or create dummy
-    PROVOST_SECRETS_DIR=$(mktemp -d)
-    
+    create_secrets_dir runner
+    create_run_dir runner
+
     API_KEY="${ALPACA_API_KEY:-dummy}"
     SECRET_KEY="${ALPACA_SECRET_KEY:-dummy}"
     PAPER_TRADE="${ALPACA_PAPER_TRADE:-true}"
     PROVOST_TOKEN_VALUE="${PROVOST_TOKEN:-dummy-provost-token}"
-    
-    chmod 700 "$PROVOST_SECRETS_DIR"
+
     write_secret_file "$API_KEY" "$PROVOST_SECRETS_DIR/alpaca_api_key"
     write_secret_file "$SECRET_KEY" "$PROVOST_SECRETS_DIR/alpaca_secret_key"
     write_secret_file "$PAPER_TRADE" "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
     write_secret_file "$PROVOST_TOKEN_VALUE" "$PROVOST_SECRETS_DIR/provost_token"
-    
+
     echo "export PROVOST_SECRETS_DIR='$PROVOST_SECRETS_DIR'"
-    echo "trap \"rm -rf '$PROVOST_SECRETS_DIR'\" EXIT"
-    echo "echo '[bootstrap:runner] secrets staged in $PROVOST_SECRETS_DIR'"
+    echo "export PROVOST_RUN_DIR='$PROVOST_RUN_DIR'"
+    emit_export_or_unset AWS_REGION "${AWS_REGION:-}"
+    emit_export_or_unset S3_BUCKET "${S3_BUCKET:-}"
+    emit_export_or_unset AWS_ACCESS_KEY_ID "${AWS_ACCESS_KEY_ID:-}"
+    emit_export_or_unset AWS_SECRET_ACCESS_KEY "${AWS_SECRET_ACCESS_KEY:-}"
+    emit_export_or_unset AWS_SESSION_TOKEN "${AWS_SESSION_TOKEN:-}"
+    if [ -n "${INSTANCE_ID:-}" ]; then
+      echo "export INSTANCE_ID='${INSTANCE_ID}'"
+    else
+      echo "export INSTANCE_ID='runner-local'"
+    fi
+    echo "trap \"rm -rf '$PROVOST_SECRETS_DIR' '$PROVOST_RUN_DIR'\" EXIT"
+    echo "echo '[bootstrap:runner] staged secrets/runtime dirs'"
     ;;
-  
+
   ec2)
-    # EC2 mode: fetch from AWS Secrets Manager using instance role
     if ! command -v aws >/dev/null 2>&1; then
       echo "echo '[bootstrap:ec2] ERROR: aws cli not found' >&2" >&2
       exit 1
     fi
-    
+
+    create_secrets_dir ec2
+    create_run_dir ec2
+
     SECRET_NAME="${PROVOST_SECRET_NAME:-agent-provost/alpaca}"
     REGION="${AWS_REGION:-us-east-1}"
-    
     SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$SECRET_NAME" --region "$REGION" --query SecretString --output text 2>&1)
-    
-    # Use /run (tmpfs) on EC2; assume directory exists or can be created
-    PROVOST_SECRETS_DIR="/run/provost-secrets"
-    mkdir -p "$PROVOST_SECRETS_DIR"
-    chmod 700 "$PROVOST_SECRETS_DIR"
-    
-    # Parse JSON and write secret files using simple string extraction (no jq dependency)
+
     API_KEY=$(printf '%s' "$SECRET_JSON" | grep -o '"ALPACA_API_KEY":"[^"]*' | cut -d'"' -f4 || echo "")
     SECRET_KEY=$(printf '%s' "$SECRET_JSON" | grep -o '"ALPACA_SECRET_KEY":"[^"]*' | cut -d'"' -f4 || echo "")
     PAPER_TRADE=$(printf '%s' "$SECRET_JSON" | grep -o '"ALPACA_PAPER_TRADE":"[^"]*' | cut -d'"' -f4 || echo "true")
     PROVOST_TOKEN_VALUE=$(printf '%s' "$SECRET_JSON" | grep -o '"PROVOST_TOKEN":"[^"]*' | cut -d'"' -f4 || echo "")
+    S3_BUCKET_VALUE=$(printf '%s' "$SECRET_JSON" | grep -o '"S3_BUCKET":"[^"]*' | cut -d'"' -f4 || echo "")
 
     if [ -z "$PROVOST_TOKEN_VALUE" ]; then
       echo "echo '[bootstrap:ec2] ERROR: PROVOST_TOKEN missing from secret payload' >&2" >&2
       exit 1
     fi
-    
+
     write_secret_file "$API_KEY" "$PROVOST_SECRETS_DIR/alpaca_api_key"
     write_secret_file "$SECRET_KEY" "$PROVOST_SECRETS_DIR/alpaca_secret_key"
     write_secret_file "$PAPER_TRADE" "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
     write_secret_file "$PROVOST_TOKEN_VALUE" "$PROVOST_SECRETS_DIR/provost_token"
-    
+
     echo "export PROVOST_SECRETS_DIR='$PROVOST_SECRETS_DIR'"
-    echo "echo '[bootstrap:ec2] secrets staged in $PROVOST_SECRETS_DIR'"
+    echo "export PROVOST_RUN_DIR='$PROVOST_RUN_DIR'"
+    echo "export AWS_REGION='${REGION}'"
+    emit_export_or_unset S3_BUCKET "$S3_BUCKET_VALUE"
+    echo "unset AWS_ACCESS_KEY_ID"
+    echo "unset AWS_SECRET_ACCESS_KEY"
+    echo "unset AWS_SESSION_TOKEN"
+    echo "export INSTANCE_ID='ec2-instance'"
+    echo "echo '[bootstrap:ec2] staged secrets/runtime dirs and configured IAM-based aws auth'"
     ;;
-  
+
   *)
     echo "echo 'Usage: \$0 {dev|runner|ec2}' >&2" >&2
     exit 1

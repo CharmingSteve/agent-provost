@@ -22,6 +22,34 @@
   [ "$status" -eq 0 ]
 }
 
+@test ".env.versions pins fluent-bit image by digest" {
+  run grep -E '^FLUENT_BIT_IMAGE=fluent/fluent-bit@sha256:[a-f0-9]{64}$' .env.versions
+  [ "$status" -eq 0 ]
+}
+
+@test "docker-compose.yml includes fluent-bit service" {
+  run grep -E '^\s*fluent-bit:\s*$' docker-compose.yml
+  [ "$status" -eq 0 ]
+}
+
+@test "docker-compose.yml uses named runtime volume for provost socket" {
+  run grep -E '^\s*- provost_run:/var/run/provost$' docker-compose.yml
+  [ "$status" -eq 0 ]
+}
+
+@test "docker-compose.yml passes AWS and bucket env vars via explicit mappings" {
+  run grep -E '^\s*AWS_REGION:\s*\$\{AWS_REGION:-us-east-1\}$' docker-compose.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^\s*AWS_ACCESS_KEY_ID:\s*\$\{AWS_ACCESS_KEY_ID:-\}$' docker-compose.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^\s*AWS_SECRET_ACCESS_KEY:\s*\$\{AWS_SECRET_ACCESS_KEY:-\}$' docker-compose.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^\s*AWS_SESSION_TOKEN:\s*\$\{AWS_SESSION_TOKEN:-\}$' docker-compose.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^\s*S3_BUCKET:\s*\$\{S3_BUCKET:-agent-provost-local\}$' docker-compose.yml
+  [ "$status" -eq 0 ]
+}
+
 @test "CI validates compose config with env-file" {
   run grep -E 'docker compose --env-file .env\.versions -f docker-compose\.yml config --quiet' .github/workflows/ci.yml
   [ "$status" -eq 0 ]

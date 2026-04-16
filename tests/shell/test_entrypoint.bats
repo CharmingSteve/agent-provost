@@ -50,44 +50,44 @@
     [ "$output" -ge 1 ]
 }
 
-@test "verify_proxy_routing.sh: truncates all four log files before each run" {
-    run grep -c ": >" verify_proxy_routing.sh
-    [ "$status" -eq 0 ]
-    [ "$output" -ge 4 ]
-}
-
-@test "verify_proxy_routing.sh: verifies hop-1 log received traffic" {
-    run grep -c "hop1_count" verify_proxy_routing.sh
+@test "verify_proxy_routing.sh: validates fluent-bit health before probe" {
+    run grep -c "wait_for_fluentbit_health\|fluent-bit health" verify_proxy_routing.sh
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }
 
-@test "verify_proxy_routing.sh: verifies hop-2 log received traffic" {
-    run grep -c "hop2_count" verify_proxy_routing.sh
+@test "verify_proxy_routing.sh: validates socket path in shared runtime dir" {
+    run grep -c "fluent-bit.sock\|socket present" verify_proxy_routing.sh
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }
 
-@test "verify_proxy_routing.sh: fails when hop-1 has no traffic" {
-    run grep -c "no hop-1 traffic logged" verify_proxy_routing.sh
+@test "verify_proxy_routing.sh: supports S3 audit evidence check" {
+    run grep -c "check_s3_for_probe\|VERIFY_S3_BUCKET\|agent-provost/logs" verify_proxy_routing.sh
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }
 
-@test "verify_proxy_routing.sh: fails when hop-2 has no traffic" {
-    run grep -c "no hop-2 traffic logged" verify_proxy_routing.sh
+@test "verify_proxy_routing.sh: supports buffer fallback evidence check" {
+    run grep -c "check_buffer_evidence\|fluent-bit buffer" verify_proxy_routing.sh
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }
 
-@test "verify_proxy_routing.sh: fails when hop-2 error log is non-empty" {
-    run grep -c "hop-2 errors present" verify_proxy_routing.sh
+@test "verify_proxy_routing.sh: embeds unique probe request id marker" {
+    run grep -c "PROBE_ID\|X-Provost-Request-Id\|PROVOST_VERIFY_REQUEST_ID" verify_proxy_routing.sh
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }
 
-@test "verify_proxy_routing.sh: reports PASS when both hops logged traffic" {
-    run grep -c "PASS: both hops logged" verify_proxy_routing.sh
+@test "verify_proxy_routing.sh: can force S3-only or buffer-only mode" {
+    run grep -c "VERIFY_REQUIRE_S3\|true)\|false)\|auto)" verify_proxy_routing.sh
+    [ "$status" -eq 0 ]
+    [ "$output" -ge 1 ]
+}
+
+@test "verify_proxy_routing.sh: reports PASS for fluent-bit audit path" {
+    run grep -c "PASS: fluent-bit socket/audit path validated" verify_proxy_routing.sh
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }

@@ -27,6 +27,17 @@ describe("default.conf log schema", function()
       assert.is_truthy(conf:match('"' .. key .. '"'))
     end
   end)
+
+  it("routes access logs to fluent-bit unix socket using json_full", function()
+    assert.is_truthy(conf:match("access_log%s+syslog:server=unix:/var/run/provost/fluent%-bit%.sock,tag=provost%.hop1%.access%s+json_full"))
+    assert.is_truthy(conf:match("access_log%s+syslog:server=unix:/var/run/provost/fluent%-bit%.sock,tag=provost%.hop2%.access%s+json_full"))
+  end)
+
+  it("routes error logs to fluent-bit unix socket with explicit tags", function()
+    assert.is_truthy(conf:match("error_log%s+syslog:server=unix:/var/run/provost/fluent%-bit%.sock,tag=provost%.nginx%.error%s+info"))
+    assert.is_truthy(conf:match("error_log%s+syslog:server=unix:/var/run/provost/fluent%-bit%.sock,tag=provost%.hop1%.error%s+info"))
+    assert.is_truthy(conf:match("error_log%s+syslog:server=unix:/var/run/provost/fluent%-bit%.sock,tag=provost%.hop2%.error%s+info"))
+  end)
 end)
 
 describe("access log json schema parsing", function()

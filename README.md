@@ -6,6 +6,28 @@ Stop your AI agent from going rogue with programmable risk guardrails and a tamp
 
 ---
 
+## Quickstart (TLDR)
+
+Clone and run locally (dev):
+Have the following set in a local .env file in the root dir of the repo
+ALPACA_API_KEY=YOUR-ALPACA-KEY
+ALPACA_SECRET_KEY=YOUR-ALPACA-SECRET-KEY
+ALPACA_PAPER_TRADE=True #just paper alpaca sandbox
+PROVOST_TOKEN=THIS-TOKEN_YOU-ranDomLy-create-locally # needs to also be in your mcp.json
+
+```sh
+git clone https://github.com/CharmingSteve/agent-provost.git
+cd agent-provost
+# ensure any previous staging is cleared
+unset PROVOST_SECRETS_DIR
+docker compose down
+eval "$(sh bootstrap.sh dev)"
+docker compose up -d
+# verify the staged token inside the running container
+docker exec agent-provost cat /run/secrets/provost_token
+```
+
+
 ## 🚀 Key Features for AI Safety & Compliance
 
 *   **Programmable Circuit Breaker (Risk Kill-Switch):** Built-in Lua logic that intercepts and blocks high-risk orders. (Default: Blocks any trade quantity > 100).
@@ -104,14 +126,16 @@ We are expanding the safety suite. What other controls should we add?
 
 ## 📊 The Ultimate Audit Ledger
 
-Logs are stored in `./nginx-logs` in a structured JSON format, making them ready for ingestion into ELK, Splunk, or custom monitoring dashboards.
+Logs are streamed from OpenResty over a Unix socket to Fluent Bit, buffered on disk, and written to S3.
 
-Log files:
+Primary audit sink:
 
-- `llm_to_alpaca_access.log`
-- `llm_to_alpaca_error.log`
-- `mcp_to_alpaca_access.log`
-- `mcp_to_alpaca_error.log`
+- `s3://$S3_BUCKET/agent-provost/logs/%Y/%m/%d/%H/$UUID.json`
+
+Local durability buffer:
+
+- `./logs/fluent-bit-storage` (host)
+- `/var/log/fluent-bit/storage` (container)
 
 Each entry captures:
 - `time_local` & `remote_addr`
@@ -145,19 +169,23 @@ sh agent-provost/verify_proxy_routing.sh
 The script:
 
 1. Recreates the entire compose stack (`docker compose --env-file .env.versions up -d --force-recreate`)
-2. Truncates all four log files to zero before probing
-3. Runs initialize + get_account_info through localhost:8088/mcp
+2. Waits for Fluent Bit health and verifies socket mount availability
+3. Runs initialize + get_account_info through localhost:8088/mcp with a unique correlation marker
 4. Fails unless:
-   - hop 1 access log has fresh lines
-   - hop 2 access log has fresh lines
-   - hop 2 error log is empty
+   - Fluent Bit socket is present
+   - Audit evidence is found in S3 (or in local durable buffer when S3 validation is disabled)
 
-After verification, inspect `llm_to_alpaca_access.log` and `mcp_to_alpaca_access.log` and confirm recent authenticated entries contain the same `provost_user`, `provost_machine`, and `provost_request_id` values across both hops.
-
-Log side effects are intentional. If you need to preserve existing logs, copy them out before running the script.
+After verification, inspect recent S3 objects under `agent-provost/logs/` and confirm entries contain expected identity and correlation fields.
 
 ### 3. Manual Startup
 Before starting the stack locally, stage secrets from `.env`:
+
+If you have stale bootstrap environment from a previous run, unset both runtime exports first:
+
+```sh
+unset PROVOST_SECRETS_DIR
+unset PROVOST_RUN_DIR
+```
 
 ```bash
 eval "$(sh bootstrap.sh dev)"
@@ -165,6 +193,14 @@ docker compose --env-file .env.versions up -d --build
 ```
 
 `bootstrap.sh dev` stages `.env` secrets into a temporary directory and exports `PROVOST_SECRETS_DIR`; `docker compose` then mounts that directory into `/run/secrets` in both containers. If you change `.env`, restart the bootstrap step and recreate the compose stack so the mounted `provost_token` still matches your MCP client configuration.
+
+For Fluent Bit audit streaming in local dev, configure these `.env` keys:
+
+- `AWS_REGION`
+- `S3_BUCKET`
+- optional `AWS_ACCESS_KEY_ID`
+- optional `AWS_SECRET_ACCESS_KEY`
+- optional `AWS_SESSION_TOKEN`
 
 Point your MCP clients to: `http://localhost:8088/mcp`
 
