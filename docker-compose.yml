@@ -28,6 +28,39 @@ services:
     pids_limit: 256
     restart: unless-stopped
 
+  fluent-bit:
+    image: ${FLUENT_BIT_IMAGE}
+    platform: linux/amd64
+    container_name: fluent-bit
+    command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+    volumes:
+      - ./fluent-bit:/fluent-bit/etc:ro
+      - provost_run:/var/run/provost
+      - ./logs/fluent-bit-storage:/var/log/fluent-bit/storage
+    environment:
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      S3_BUCKET: ${S3_BUCKET:-agent-provost-local}
+      INSTANCE_ID: ${INSTANCE_ID:-local-dev}
+    healthcheck:
+      test: ["CMD", "/fluent-bit/bin/fluent-bit", "--version"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - mcp_internal
+      - proxy_egress
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    pids_limit: 256
+    restart: unless-stopped
+
   agent-provost:
     # Pinned digest from OpenResty tag: openresty/openresty:1.29.2.3-alpine
     # (multi-arch index for linux/amd64 + linux/arm64; image labels show resty_version=1.29.2.3).
@@ -37,7 +70,10 @@ services:
     image: ${OPENRESTY_IMAGE}
     container_name: agent-provost
     depends_on:
-      - alpaca-mcp
+      alpaca-mcp:
+        condition: service_started
+      fluent-bit:
+        condition: service_healthy
     ports:
       - "8088:8000"
     expose:
@@ -47,7 +83,7 @@ services:
       - ./lua:/etc/nginx/lua:ro
       - ./rules.json:/etc/rules.json:ro
       - ${PROVOST_SECRETS_DIR:-./.secrets}:/run/secrets:ro
-      - ./nginx-logs:/data/nginx-logs
+      - provost_run:/var/run/provost
     networks:
       - mcp_internal
       - proxy_egress
@@ -62,3 +98,11 @@ networks:
   mcp_internal:
     internal: true
   proxy_egress:
+
+volumes:
+  provost_run:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: uid=0,gid=0,mode=0777

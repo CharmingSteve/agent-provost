@@ -273,5 +273,5 @@ All errors appear in the nginx error log at `ERR` level:
 - [ ] Confirm `rules.json` is mounted read-only (`:ro`) into the container.
 - [ ] Verify the initial load succeeds: `docker logs agent-provost | grep rule_loader`.
 - [ ] Validate your edited `rules.json` with `python3 -m json.tool rules.json` before deploying.
-- [ ] Monitor `nginx-logs/llm_to_alpaca_error.log` for `[rule_loader]` entries after any rule change.
+- [ ] Monitor Fluent Bit stream output (or recent S3 objects under `agent-provost/logs/`) for `[rule_loader]` entries after any rule change.
 - [ ] If reload is urgent, you can force an immediate reload by touching the file (`touch rules.json`) to bump its mtime without changing its content.
