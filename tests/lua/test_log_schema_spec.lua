@@ -30,15 +30,15 @@ describe("default.conf log schema", function()
 
   it("routes access logs to fluent-bit unix socket using json_full", function()
     local sock = "syslog:server=unix:/var/run/provost/fluent%-bit%.sock"
-    assert.is_truthy(conf:match("access_log%s+" .. sock .. ",tag=provost%.hop1%.access%s+json_full"))
-    assert.is_truthy(conf:match("access_log%s+" .. sock .. ",tag=provost%.hop2%.access%s+json_full"))
+    assert.is_truthy(conf:match("access_log%s+" .. sock .. ",tag=provost_hop1_access%s+json_full"))
+    assert.is_truthy(conf:match("access_log%s+" .. sock .. ",tag=provost_hop2_access%s+json_full"))
   end)
 
   it("routes error logs to fluent-bit unix socket with explicit tags", function()
     local sock = "syslog:server=unix:/var/run/provost/fluent%-bit%.sock"
-    assert.is_truthy(conf:match("error_log%s+" .. sock .. ",tag=provost%.nginx%.error%s+info"))
-    assert.is_truthy(conf:match("error_log%s+" .. sock .. ",tag=provost%.hop1%.error%s+info"))
-    assert.is_truthy(conf:match("error_log%s+" .. sock .. ",tag=provost%.hop2%.error%s+info"))
+    assert.is_truthy(conf:match("error_log%s+" .. sock .. ",tag=provost_nginx_error%s+info"))
+    assert.is_truthy(conf:match("error_log%s+" .. sock .. ",tag=provost_hop1_error%s+info"))
+    assert.is_truthy(conf:match("error_log%s+" .. sock .. ",tag=provost_hop2_error%s+info"))
   end)
 end)
 
