@@ -51,6 +51,7 @@ services:
       retries: 20
     networks:
       - mcp_internal
+      - proxy_egress
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -100,3 +101,8 @@ networks:
 
 volumes:
   provost_run:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: uid=0,gid=0,mode=0777
