@@ -1,0 +1,61 @@
+name: Increment Patch Version On PR Close
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+jobs:
+  bump-patch:
+    if: ${{ github.event.pull_request.base.ref == 'main' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Bump only patch in version.txt
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f version.txt ]]; then
+            echo "version.txt missing; skipping without failure"
+            exit 0
+          fi
+
+          current="$(tr -d '\r\n' < version.txt)"
+
+          if [[ "$current" =~ ^(v?)([0-9]+)\.([0-9]+)\.([0-9]+)(.*)$ ]]; then
+            prefix="${BASH_REMATCH[1]}"
+            major="${BASH_REMATCH[2]}"
+            minor="${BASH_REMATCH[3]}"
+            patch="${BASH_REMATCH[4]}"
+            suffix="${BASH_REMATCH[5]}"
+
+            new_patch=$((patch + 1))
+            new_version="${prefix}${major}.${minor}.${new_patch}${suffix}"
+
+            echo "$new_version" > version.txt
+            echo "Version: $current -> $new_version"
+          else
+            echo "version.txt is not semver-like; skipping without failure"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet -- version.txt; then
+            echo "No change detected; nothing to commit"
+            exit 0
+          fi
+
+          git add version.txt
+          git commit -m "chore: bump patch version after PR close"
+          git push origin HEAD:main
