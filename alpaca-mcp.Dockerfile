@@ -3,10 +3,12 @@ ARG BASE_PYTHON_IMAGE=python:3.11-alpine@sha256:f07e2ace46f560f09a6eeec7b4913b80
 # hadolint ignore=DL3006
 FROM ${BASE_PYTHON_IMAGE}
 
+COPY hash-pip/requirements-runtime.txt /tmp/requirements-runtime.txt
+
 RUN apk upgrade --no-cache \
-	&& pip install --no-cache-dir "uv==0.8.16" \
-	&& pip install --no-cache-dir "alpaca-mcp-server==2.0.0" \
-	&& pip install --no-cache-dir "pip==24.0" "setuptools==82.0.1" "wheel==0.46.3" "jaraco.context==6.1.2" \
+	&& pip install --no-cache-dir --require-hashes --no-deps -r /tmp/requirements-runtime.txt \
+	&& pip install --no-cache-dir "alpaca-mcp-server==2.0.1" \
+	&& rm -f /tmp/requirements-runtime.txt \
 	&& adduser -D -u 10001 -s /bin/sh appuser \
 	&& chown -R appuser:appuser /usr/local/lib/python3.11/site-packages
 

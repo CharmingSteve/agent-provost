@@ -1,0 +1,44 @@
+# Hash-verified runtime dependencies for alpaca-mcp image builds.
+#
+# IMPORTANT: Keep each package block annotated with the exact version represented
+# by the hashes. This mirrors image digest pinning discipline for pip artifacts.
+#
+# Generated from PyPI JSON endpoints:
+#   https://pypi.org/pypi/<package>/<version>/json
+
+# Package: uv
+# Version represented by these hashes: 0.11.7
+uv==0.11.7 \
+    --hash=sha256:5985a15a92bd9a170fc1947abb1fbc3e9828c5a430ad85b5bed8356c20b67a71 \
+    --hash=sha256:0df59ab0c6a4b14a763e8445e1c303af9abeb53cdfa4428daf9ff9642c0a3cce \
+    --hash=sha256:46d971489b00bdb27e0aa715e4a5cd4ef2c28ea5b6ef78f2b67bf861eb44b405
+
+# Package: alpaca-mcp-server
+# Version represented by these hashes: 2.0.1
+alpaca-mcp-server==2.0.1 \
+    --hash=sha256:5e37283700fc11999e8ab1e7a4b35d9454257b7402c74d4c301af2024229de05 \
+    --hash=sha256:d86d6a45ab58ce6b875ad79076183827963b7d802c5beeb69e1b54e8aae29278
+
+# Package: pip
+# Version represented by these hashes: 26.0.1
+pip==26.0.1 \
+    --hash=sha256:bdb1b08f4274833d62c1aa29e20907365a2ceb950410df15fc9521bad440122b \
+    --hash=sha256:c4037d8a277c89b320abe636d59f91e6d0922d08a05b60e85e53b296613346d8
+
+# Package: setuptools
+# Version represented by these hashes: 82.0.1
+setuptools==82.0.1 \
+    --hash=sha256:a59e362652f08dcd477c78bb6e7bd9d80a7995bc73ce773050228a348ce2e5bb \
+    --hash=sha256:7d872682c5d01cfde07da7bccc7b65469d3dca203318515ada1de5eda35efbf9
+
+# Package: wheel
+# Version represented by these hashes: 0.46.3
+wheel==0.46.3 \
+    --hash=sha256:4b399d56c9d9338230118d705d9737a2a468ccca63d5e813e2a4fc7815d8bc4d \
+    --hash=sha256:e3e79874b07d776c40bd6033f8ddf76a7dad46a7b8aa1b2787a83083519a1803
+
+# Package: jaraco.context
+# Version represented by these hashes: 6.1.2
+jaraco.context==6.1.2 \
+    --hash=sha256:bf8150b79a2d5d91ae48629d8b427a8f7ba0e1097dd6202a9059f29a36379535 \
+    --hash=sha256:f1a6c9d391e661cc5b8d39861ff077a7dc24dc23833ccee564b234b81c82dfe3
