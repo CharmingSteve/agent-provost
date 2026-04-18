@@ -6,10 +6,11 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   bump-patch:
-    if: ${{ github.event.pull_request.base.ref == 'main' }}
+    if: ${{ github.event.pull_request.base.ref == 'main' && !startsWith(github.event.pull_request.head.ref, 'version-bump/') }}
     runs-on: ubuntu-latest
 
     steps:
@@ -20,12 +21,14 @@ jobs:
           fetch-depth: 0
 
       - name: Bump only patch in version.txt
+        id: bump
         shell: bash
         run: |
           set -euo pipefail
 
           if [[ ! -f version.txt ]]; then
             echo "version.txt missing; skipping without failure"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -43,19 +46,24 @@ jobs:
 
             echo "$new_version" > version.txt
             echo "Version: $current -> $new_version"
+            echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "version.txt is not semver-like; skipping without failure"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          if git diff --quiet -- version.txt; then
-            echo "No change detected; nothing to commit"
-            exit 0
-          fi
-
-          git add version.txt
-          git commit -m "chore: bump patch version after PR close"
-          git push origin HEAD:main
+      - name: Create version bump PR
+        if: steps.bump.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: bump patch version after PR close"
+          title: "chore: bump version to ${{ steps.bump.outputs.new_version }}"
+          body: "Automated patch version bump after PR close."
+          branch: "version-bump/${{ github.event.pull_request.number }}-${{ github.run_id }}"
+          delete-branch: true
+          base: main
+          labels: automation
+          add-paths: |
+            version.txt
