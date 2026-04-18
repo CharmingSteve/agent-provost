@@ -269,3 +269,5 @@ The sovereign mock harness is not included in this branch. Use the separate demo
 ---
 
 *Agent Provost is an open-source project aimed at making autonomous finance safer for everyone. If you find this useful, please **Star** the repository and contribute your safety logic ideas!*
+
+Temporary validation line for version bump workflow.
