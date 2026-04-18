@@ -1,40 +1,39 @@
 name: Increment Patch Version On PR Close
 
 on:
-  pull_request:
-    types: [closed]
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   bump-patch:
-    if: ${{ github.event.pull_request.base.ref == 'main' && !startsWith(github.event.pull_request.head.ref, 'version-bump/') }}
+    if: ${{ github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository && !startsWith(github.event.pull_request.head.ref, 'version-bump/') }}
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout main
+      - name: Checkout PR head branch
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
-      - name: Bump only patch in version.txt
-        id: bump
+      - name: Bump only patch in version.txt and push to PR branch
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ ! -f version.txt ]]; then
-            echo "version.txt missing; skipping without failure"
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+          git fetch origin main
+
+          if ! git show origin/main:version.txt >/tmp/main-version.txt 2>/dev/null; then
+            echo "version.txt missing on main; skipping without failure"
             exit 0
           fi
 
-          current="$(tr -d '\r\n' < version.txt)"
+          current_main="$(tr -d '\r\n' < /tmp/main-version.txt)"
 
-          if [[ "$current" =~ ^(v?)([0-9]+)\.([0-9]+)\.([0-9]+)(.*)$ ]]; then
+          if [[ "$current_main" =~ ^(v?)([0-9]+)\.([0-9]+)\.([0-9]+)(.*)$ ]]; then
             prefix="${BASH_REMATCH[1]}"
             major="${BASH_REMATCH[2]}"
             minor="${BASH_REMATCH[3]}"
@@ -43,26 +42,31 @@ jobs:
 
             new_patch=$((patch + 1))
             new_version="${prefix}${major}.${minor}.${new_patch}${suffix}"
-
-            echo "$new_version" > version.txt
-            echo "Version: $current -> $new_version"
-            echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
-            echo "changed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "version.txt is not semver-like; skipping without failure"
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "main version.txt is not semver-like; skipping without failure"
             exit 0
           fi
 
-      - name: Create version bump PR
-        if: steps.bump.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v6
-        with:
-          commit-message: "chore: bump patch version after PR close"
-          title: "chore: bump version to ${{ steps.bump.outputs.new_version }}"
-          body: "Automated patch version bump after PR close."
-          branch: "version-bump/${{ github.event.pull_request.number }}-${{ github.run_id }}"
-          delete-branch: true
-          base: main
-          add-paths: |
-            version.txt
+          current_pr=""
+          if [[ -f version.txt ]]; then
+            current_pr="$(tr -d '\r\n' < version.txt)"
+          fi
+
+          if [[ "$current_pr" == "$new_version" ]]; then
+            echo "PR already has desired version $new_version"
+            exit 0
+          fi
+
+          echo "$new_version" > version.txt
+          echo "Version update for PR #${{ github.event.pull_request.number }}: ${current_pr:-<missing>} -> $new_version"
+
+          if git diff --quiet -- version.txt; then
+            echo "No change detected; nothing to commit"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add version.txt
+          git commit -m "chore: bump version to ${new_version} for PR #${{ github.event.pull_request.number }}"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
