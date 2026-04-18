@@ -64,6 +64,5 @@ jobs:
           branch: "version-bump/${{ github.event.pull_request.number }}-${{ github.run_id }}"
           delete-branch: true
           base: main
-          labels: automation
           add-paths: |
             version.txt
