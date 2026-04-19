@@ -148,6 +148,18 @@ end)
         assert.is_true(engine.check_request(make_parsed({ notional = 5100, limit_price = 100 }), rules_50))
     end)
 
+    it("blocks trades above the configured dollar notional limit", function()
+        local rules_value = { max_trade_notional = { enabled = true, params = { limit = 50000 } } }
+        assert.is_true(engine.check_request(make_parsed({ notional = 51000, limit_price = 250 }), rules_value))
+        assert.is_false(engine.check_request(make_parsed({ notional = 49000, limit_price = 250 }), rules_value))
+    end)
+
+    it("blocks qty orders against notional limit when limit_price is provided", function()
+        local rules_value = { max_trade_notional = { enabled = true, params = { limit = 50000 } } }
+        assert.is_true(engine.check_request(make_parsed({ qty = 210.7, limit_price = 242 }), rules_value))
+        assert.is_false(engine.check_request(make_parsed({ qty = 200, limit_price = 242 }), rules_value))
+    end)
+
 -- ---------------------------------------------------------------------------
 -- blocked_tool_names rule
 -- ---------------------------------------------------------------------------

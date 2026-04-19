@@ -133,6 +133,42 @@ end
             end
         end
     end
+
+    -- ----------------------------------------------------------------
+    -- Rule: max_trade_notional
+    -- ----------------------------------------------------------------
+    local notional_rule = rules.max_trade_notional
+    if type(notional_rule) == "table" and notional_rule.enabled == true then
+        local limit_value = nil
+        if type(notional_rule.params) == "table" then
+            limit_value = tonumber(notional_rule.params.limit)
+        end
+
+        if limit_value and limit_value > 0 then
+            local notional = normalize_notional(args)
+            local qty = normalize_quantity(args)
+            local limit_price = normalize_limit_price(args)
+            local estimated_value = nil
+
+            if notional ~= nil and notional > 0 then
+                estimated_value = notional
+            elseif qty ~= nil and qty > 0 and limit_price ~= nil and limit_price > 0 then
+                estimated_value = qty * limit_price
+            end
+
+            if estimated_value and estimated_value > limit_value then
+                return true,
+                    "PROVOST_INTERVENTION: Risk Limit Exceeded. " ..
+                    "Attempted trade value too large. Blocked to protect capital."
+            end
+
+            if notional ~= nil and notional > 0 and (limit_price == nil or limit_price <= 0) then
+                return true,
+                    "PROVOST_INTERVENTION: Risk Limit Exceeded. " ..
+                    "Notional orders require limit_price for safe evaluation."
+            end
+        end
+    end
     -- ----------------------------------------------------------------
     -- Rule: blocked_tool_names
     -- Blocks requests whose tool name is explicitly restricted.

@@ -6,6 +6,13 @@
       "limit": 100
     }
   },
+  "max_trade_notional": {
+    "enabled": true,
+    "description": "Block trades whose dollar notional value exceeds the configured limit.",
+    "params": {
+      "limit": 50000
+    }
+  },
   "blocked_tickers": {
     "enabled": true,
     "description": "Block trades on tickers that appear in the restricted symbol list. Prevents unauthorized exposure to specific securities.",
