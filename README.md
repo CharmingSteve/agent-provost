@@ -22,7 +22,7 @@ cd agent-provost
 unset PROVOST_SECRETS_DIR
 docker compose down
 eval "$(sh bootstrap.sh dev)"
-docker compose up -d
+docker compose --env-file .env.versions up -d
 # verify the staged token inside the running container
 docker exec agent-provost cat /run/secrets/provost_token
 ```
@@ -67,10 +67,10 @@ If you want full traceability, these four events should be visible across the tw
 3. Alpaca -> proxy response to MCP
 4. Proxy -> LLM response from MCP
 
-How they map:
+How they map in the Fluent Bit pipeline (`stream_tag`):
 
-- `llm_to_alpaca_access.log`: step 1 (LLM -> MCP) and step 4 (MCP -> LLM)
-- `mcp_to_alpaca_access.log`: step 2 (MCP -> Alpaca) and step 3 (Alpaca -> MCP)
+- `provost_hop1_access`: step 1 (LLM -> MCP) and step 4 (MCP -> LLM)
+- `provost_hop2_access`: step 2 (MCP -> Alpaca) and step 3 (Alpaca -> MCP)
 
 For normal authenticated trading traffic, both access logs should carry the same identity fields:
 
@@ -137,16 +137,21 @@ Local durability buffer:
 - `./logs/fluent-bit-storage` (host)
 - `/var/log/fluent-bit/storage` (container)
 
-Each entry captures:
+Each OpenResty access log entry (from `json_full`) captures:
 - `time_local` & `remote_addr`
 - `request` (Method/Path)
-- `status` (200, 403, etc.)
+- `status` ("200", "403", etc.)
 - `body_bytes_sent`, `request_time`, `upstream_response_time`
 - `provost_request_id` (the correlation id shared across hops)
 - `provost_user` (the human/client identity from the MCP request headers)
 - `provost_machine` (the client machine identity from the MCP request headers)
 - `request_body` (The actual JSON sent by the AI)
 - `resp_body` (The actual JSON returned by the API)
+
+Fluent Bit then parses/enriches and writes records to S3, including:
+- `stream_tag` (`provost_hop1_access`, `provost_hop2_access`, and error tags)
+- `Region`
+- `Instance_ID`
 
 `provost_request_id` is created on Hop 1 when the inbound request is validated. If the client already supplied `X-Provost-Request-Id`, the proxy reuses it; otherwise Hop 1 generates one from `request_id` or a timestamp-random fallback, stores the identity context in shared memory, and forwards the same id downstream so Hop 2 can recover and log the same correlation id.
 
