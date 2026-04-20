@@ -148,6 +148,18 @@ end)
         assert.is_true(engine.check_request(make_parsed({ notional = 5100, limit_price = 100 }), rules_50))
     end)
 
+    it("blocks trades above the configured dollar notional limit", function()
+        local rules_value = { max_trade_notional = { enabled = true, params = { limit = 50000 } } }
+        assert.is_true(engine.check_request(make_parsed({ notional = 51000, limit_price = 250 }), rules_value))
+        assert.is_false(engine.check_request(make_parsed({ notional = 49000, limit_price = 250 }), rules_value))
+    end)
+
+    it("blocks qty orders against notional limit when limit_price is provided", function()
+        local rules_value = { max_trade_notional = { enabled = true, params = { limit = 50000 } } }
+        assert.is_true(engine.check_request(make_parsed({ qty = 210.7, limit_price = 242 }), rules_value))
+        assert.is_false(engine.check_request(make_parsed({ qty = 200, limit_price = 242 }), rules_value))
+    end)
+
 -- ---------------------------------------------------------------------------
 -- blocked_tool_names rule
 -- ---------------------------------------------------------------------------
@@ -377,6 +389,103 @@ describe("rules_engine: edge cases", function()
         local blocked, reason = engine.check_request(make_parsed({ quantity = 5 }), rules)
         assert.is_false(blocked)
         assert.is_nil(reason)
+    end)
+
+end)
+
+-- ---------------------------------------------------------------------------
+-- cumulative_trade_notional rule
+-- ---------------------------------------------------------------------------
+describe("rules_engine: cumulative_trade_notional rule", function()
+
+    local function make_store()
+        local data = {}
+        return {
+            add = function(_, key, value, _)
+                if data[key] ~= nil then
+                    return nil, "exists"
+                end
+                data[key] = value
+                return true
+            end,
+            get = function(_, key)
+                return data[key]
+            end,
+            set = function(_, key, value, _)
+                data[key] = value
+                return true
+            end
+        }
+    end
+
+    it("blocks the second order when cumulative notional crosses the limit", function()
+        local rules = {
+            cumulative_trade_notional = {
+                enabled = true,
+                params = {
+                    limit = 50000,
+                    window_seconds = 300
+                }
+            }
+        }
+        local ctx = {
+            user = "risk-user",
+            machine = "risk-machine",
+            store = make_store()
+        }
+
+        local blocked_first = engine.check_request(
+            make_parsed({ symbol = "GOOGL", qty = "10", limit_price = "2500" }, "place_stock_order"),
+            rules,
+            ctx
+        )
+        assert.is_false(blocked_first)
+
+        local blocked_second, reason_second = engine.check_request(
+            make_parsed({ symbol = "GOOGL", qty = "11", limit_price = "2500" }, "place_stock_order"),
+            rules,
+            ctx
+        )
+        assert.is_true(blocked_second)
+        assert.truthy(reason_second:find("Cumulative Risk Limit Exceeded"))
+    end)
+
+    it("tracks cumulative exposure separately per identity", function()
+        local rules = {
+            cumulative_trade_notional = {
+                enabled = true,
+                params = {
+                    limit = 50000,
+                    window_seconds = 300
+                }
+            }
+        }
+        local shared_store = make_store()
+
+        local ctx_a = {
+            user = "risk-user-a",
+            machine = "risk-machine",
+            store = shared_store
+        }
+        local ctx_b = {
+            user = "risk-user-b",
+            machine = "risk-machine",
+            store = shared_store
+        }
+
+        local blocked_a = engine.check_request(
+            make_parsed({ symbol = "GOOGL", qty = "20", limit_price = "2500" }, "place_stock_order"),
+            rules,
+            ctx_a
+        )
+        assert.is_false(blocked_a)
+
+        local blocked_b = engine.check_request(
+            make_parsed({ symbol = "GOOGL", qty = "20", limit_price = "2500" }, "place_stock_order"),
+            rules,
+            ctx_b
+        )
+        assert.is_false(blocked_b)
     end)
 
 end)
