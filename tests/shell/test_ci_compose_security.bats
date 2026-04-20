@@ -69,6 +69,15 @@
   [ "$status" -eq 0 ]
 }
 
+@test "CI scans fluent-bit image" {
+  run grep -E 'docker pull "\$\{FLUENT_BIT_IMAGE\}"' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'docker image inspect "\$\{FLUENT_BIT_IMAGE\}" >/dev/null' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH "\$\{FLUENT_BIT_IMAGE\}"' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+}
+
 @test "Checkov is blocking and scans workflow/yaml too" {
   run grep -E 'checkov --directory \. --framework dockerfile,github_actions,yaml --quiet$' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
@@ -84,5 +93,9 @@
   run grep -E 'TRIVY_ALPACA_MCP_CVES=' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
   run grep -E 'has HIGH/CRITICAL CVEs: \$\{TRIVY_ALPACA_MCP_CVES:-unavailable\}' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'TRIVY_FLUENT_BIT_CVES=' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'has HIGH/CRITICAL CVEs: \$\{TRIVY_FLUENT_BIT_CVES:-unavailable\}' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
