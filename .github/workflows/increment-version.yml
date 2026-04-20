@@ -20,53 +20,56 @@ jobs:
           fetch-depth: 0
 
       - name: Bump only patch in version.txt and push to PR branch
-        shell: bash
-        run: |
-          set -euo pipefail
+         shell: bash
+         env:
+           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+           PR_NUMBER: ${{ github.event.pull_request.number }}
+         run: |
+           set -euo pipefail
 
-          git fetch origin main
+           git fetch origin main
 
-          if ! git show origin/main:version.txt >/tmp/main-version.txt 2>/dev/null; then
-            echo "version.txt missing on main; skipping without failure"
-            exit 0
-          fi
+           if ! git show origin/main:version.txt >/tmp/main-version.txt 2>/dev/null; then
+             echo "version.txt missing on main; skipping without failure"
+             exit 0
+           fi
 
-          current_main="$(tr -d '\r\n' < /tmp/main-version.txt)"
+           current_main="$(tr -d '\r\n' < /tmp/main-version.txt)"
 
-          if [[ "$current_main" =~ ^(v?)([0-9]+)\.([0-9]+)\.([0-9]+)(.*)$ ]]; then
-            prefix="${BASH_REMATCH[1]}"
-            major="${BASH_REMATCH[2]}"
-            minor="${BASH_REMATCH[3]}"
-            patch="${BASH_REMATCH[4]}"
-            suffix="${BASH_REMATCH[5]}"
+           if [[ "$current_main" =~ ^(v?)([0-9]+)\.([0-9]+)\.([0-9]+)(.*)$ ]]; then
+             prefix="${BASH_REMATCH[1]}"
+             major="${BASH_REMATCH[2]}"
+             minor="${BASH_REMATCH[3]}"
+             patch="${BASH_REMATCH[4]}"
+             suffix="${BASH_REMATCH[5]}"
 
-            new_patch=$((patch + 1))
-            new_version="${prefix}${major}.${minor}.${new_patch}${suffix}"
-          else
-            echo "main version.txt is not semver-like; skipping without failure"
-            exit 0
-          fi
+             new_patch=$((patch + 1))
+             new_version="${prefix}${major}.${minor}.${new_patch}${suffix}"
+           else
+             echo "main version.txt is not semver-like; skipping without failure"
+             exit 0
+           fi
 
-          current_pr=""
-          if [[ -f version.txt ]]; then
-            current_pr="$(tr -d '\r\n' < version.txt)"
-          fi
+           current_pr=""
+           if [[ -f version.txt ]]; then
+             current_pr="$(tr -d '\r\n' < version.txt)"
+           fi
 
-          if [[ "$current_pr" == "$new_version" ]]; then
-            echo "PR already has desired version $new_version"
-            exit 0
-          fi
+           if [[ "$current_pr" == "$new_version" ]]; then
+             echo "PR already has desired version $new_version"
+             exit 0
+           fi
 
-          echo "$new_version" > version.txt
-          echo "Version update for PR #${{ github.event.pull_request.number }}: ${current_pr:-<missing>} -> $new_version"
+           echo "$new_version" > version.txt
+           echo "Version update for PR #${PR_NUMBER}: ${current_pr:-<missing>} -> $new_version"
 
-          if git diff --quiet -- version.txt; then
-            echo "No change detected; nothing to commit"
-            exit 0
-          fi
+           if git diff --quiet -- version.txt; then
+             echo "No change detected; nothing to commit"
+             exit 0
+           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add version.txt
-          git commit -m "chore: bump version to ${new_version} for PR #${{ github.event.pull_request.number }}"
-          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
+           git config user.name "github-actions[bot]"
+           git config user.email "github-actions[bot]@users.noreply.github.com"
+           git add version.txt
+           git commit -m "chore: bump version to ${new_version} for PR #${PR_NUMBER}"
+           git push origin "HEAD:${PR_HEAD_REF}"
