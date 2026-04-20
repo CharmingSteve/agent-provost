@@ -299,7 +299,7 @@ jobs:
   # ── Build → Secure → Push → Test (ECR Public) ─────────────────────────────
   build-secure-push-test:
     name: Build -> Secure -> Push -> Test (ECR Public)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [test-lua, test-shell, log-schema-validation, security-trivy, security-python-audit]
     permissions:
       contents: read
