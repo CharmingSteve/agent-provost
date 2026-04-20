@@ -304,8 +304,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    env:
-      DOCKER_DEFAULT_PLATFORM: linux/arm64
     steps:
       - uses: actions/checkout@v4
       - name: Set image tags
