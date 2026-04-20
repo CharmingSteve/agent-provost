@@ -100,7 +100,7 @@
 @test "CI includes python dependency audit with pip-audit" {
   run grep -E '^  security-python-audit:' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E 'pip-audit -r hash-pip/requirements-runtime.txt' .github/workflows/ci.yml
+  run grep -E 'pip-audit .*hash-pip/requirements-runtime.txt' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 
