@@ -39,13 +39,12 @@ jobs:
       - name: Install Hadolint
         run: |
           set -euo pipefail
-          HADOLINT_VERSION="v2.12.0"
-          HADOLINT_BIN="hadolint-Linux-x86_64"
+          HADOLINT_VERSION="v2.14.0"
+          HADOLINT_BIN="hadolint-linux-x86_64"
           HADOLINT_BASE_URL="https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}"
           curl -fsSL -o "/tmp/${HADOLINT_BIN}" "${HADOLINT_BASE_URL}/${HADOLINT_BIN}"
-          curl -fsSL -o /tmp/hadolint-checksums.txt "${HADOLINT_BASE_URL}/hadolint-checksums.txt"
-          grep " ${HADOLINT_BIN}$" /tmp/hadolint-checksums.txt > /tmp/hadolint.sha256
-          (cd /tmp && sha256sum -c /tmp/hadolint.sha256)
+          curl -fsSL -o "/tmp/${HADOLINT_BIN}.sha256" "${HADOLINT_BASE_URL}/${HADOLINT_BIN}.sha256"
+          (cd /tmp && sha256sum -c "${HADOLINT_BIN}.sha256")
           sudo install -m 0755 "/tmp/${HADOLINT_BIN}" /usr/local/bin/hadolint
       - name: Lint Dockerfile
         run: |
@@ -134,7 +133,7 @@ jobs:
       - name: Install Trivy
         run: |
           set -euo pipefail
-          TRIVY_VERSION="0.56.2"
+          TRIVY_VERSION="0.70.0"
           TRIVY_TARBALL="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
           TRIVY_BASE_URL="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
           curl -fsSL -o "/tmp/${TRIVY_TARBALL}" "${TRIVY_BASE_URL}/${TRIVY_TARBALL}"
