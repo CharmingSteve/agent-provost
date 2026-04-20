@@ -60,6 +60,16 @@
   [ "$status" -ne 0 ]
 }
 
+@test "CI log schema validation enforces escape=json in default.conf log_format" {
+  run grep -E "log_format\\[\\[:space:\\]\\]\\+json_full\\[\\[:space:\\]\\]\\+escape=json" .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+}
+
+@test "build-secure-push-test depends on security-trivy and python audit jobs" {
+  run grep -E 'needs: \[test-lua, test-shell, log-schema-validation, security-trivy, security-python-audit\]' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+}
+
 @test "CI scans built alpaca-mcp image" {
   run grep -E 'ALPACA_IMAGE_TAG=\$\(git rev-parse --short=7 HEAD\)' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
@@ -84,5 +94,21 @@
   run grep -E 'TRIVY_ALPACA_MCP_CVES=' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
   run grep -E 'has HIGH/CRITICAL CVEs: \$\{TRIVY_ALPACA_MCP_CVES:-unavailable\}' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+}
+
+@test "CI includes python dependency audit with pip-audit" {
+  run grep -E '^  security-python-audit:' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'pip-audit -r hash-pip/requirements-runtime.txt' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+}
+
+@test "compose services are configured as non-root and read-only" {
+  run grep -E '^\s*user:\s*"10001:10001"$' docker-compose.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^\s*user:\s*"65532:65532"$' docker-compose.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^\s*read_only:\s*true$' docker-compose.yml
   [ "$status" -eq 0 ]
 }

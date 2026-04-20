@@ -21,6 +21,8 @@ services:
       - mcp_internal
     security_opt:
       - no-new-privileges:true
+    user: "10001:10001"
+    read_only: true
     cap_drop:
       - ALL
     tmpfs:
@@ -54,6 +56,8 @@ services:
       - proxy_egress
     security_opt:
       - no-new-privileges:true
+    user: "65532:65532"
+    read_only: true
     cap_drop:
       - ALL
     tmpfs:
@@ -89,6 +93,10 @@ services:
       - proxy_egress
     security_opt:
       - no-new-privileges:true
+    user: "65532:65532"
+    read_only: true
+    cap_drop:
+      - ALL
     tmpfs:
       - /tmp
     pids_limit: 256

@@ -20,6 +20,17 @@ local _M = {}
 -- is absent or non-numeric.
 local DEFAULT_TRADE_SIZE_LIMIT = 100
 
+local function normalize_identifier(value)
+    if type(value) ~= "string" then
+        return nil
+    end
+    local cleaned = value:gsub("%z", ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if cleaned == "" then
+        return nil
+    end
+    return cleaned
+end
+
 local function get_tool_name(parsed)
     if type(parsed) ~= "table" then
         return nil
@@ -28,11 +39,11 @@ local function get_tool_name(parsed)
     if parsed.method == "tools/call"
        and type(parsed.params) == "table"
        and type(parsed.params.name) == "string" then
-        return parsed.params.name
+        return normalize_identifier(parsed.params.name)
     end
 
     if type(parsed.method) == "string" then
-        return parsed.method
+        return normalize_identifier(parsed.method)
     end
 
     return nil
@@ -53,10 +64,28 @@ local function normalize_ticker(args)
         return ""
     end
 
-    return tostring(args.ticker
+    local raw = args.ticker
         or args.symbol
         or args.symbol_or_asset_id
-        or "")
+
+    local cleaned = normalize_identifier(raw)
+    if not cleaned then
+        return ""
+    end
+
+    return cleaned:upper()
+end
+
+local function has_invalid_ticker_type(args)
+    if type(args) ~= "table" then
+        return false
+    end
+    for _, key in ipairs({ "ticker", "symbol", "symbol_or_asset_id" }) do
+        if args[key] ~= nil and type(args[key]) ~= "string" then
+            return true
+        end
+    end
+    return false
 end
 
 local function normalize_notional(args)
@@ -295,12 +324,19 @@ function _M.check_request(parsed, rules, context)
        and type(restricted_tool_rule.params.tools) == "table"
        and type(restricted_tool_rule.params.tickers) == "table"
        and tool_name ~= nil then
+        if has_invalid_ticker_type(args) then
+            return true,
+                "PROVOST_INTERVENTION: Invalid ticker type. " ..
+                "Ticker fields must be strings."
+        end
         local ticker = normalize_ticker(args)
         if ticker ~= "" then
             for _, blocked_tool in ipairs(restricted_tool_rule.params.tools) do
-                if tool_name == tostring(blocked_tool) then
+                local blocked_tool_name = normalize_identifier(blocked_tool)
+                if blocked_tool_name ~= nil and tool_name == blocked_tool_name then
                     for _, blocked_sym in ipairs(restricted_tool_rule.params.tickers) do
-                        if ticker == tostring(blocked_sym) then
+                        local blocked_symbol = normalize_identifier(blocked_sym)
+                        if blocked_symbol ~= nil and ticker == blocked_symbol:upper() then
                             return true,
                                 "PROVOST_INTERVENTION: Restricted symbol '" .. ticker ..
                                 "' blocked for tool '" .. tool_name .. "'."
@@ -317,11 +353,17 @@ function _M.check_request(parsed, rules, context)
     -- ----------------------------------------------------------------
     local ticker_rule = rules.blocked_tickers
     if type(ticker_rule) == "table" and ticker_rule.enabled == true then
+        if has_invalid_ticker_type(args) then
+            return true,
+                "PROVOST_INTERVENTION: Invalid ticker type. " ..
+                "Ticker fields must be strings."
+        end
         local ticker = normalize_ticker(args)
         if type(ticker_rule.params) == "table"
            and type(ticker_rule.params.tickers) == "table" then
             for _, blocked_sym in ipairs(ticker_rule.params.tickers) do
-                if ticker == tostring(blocked_sym) then
+                local blocked_symbol = normalize_identifier(blocked_sym)
+                if blocked_symbol ~= nil and ticker == blocked_symbol:upper() then
                     return true,
                         "PROVOST_INTERVENTION: Ticker '" .. ticker ..
                         "' is on the restricted list."

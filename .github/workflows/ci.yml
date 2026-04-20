@@ -38,9 +38,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Hadolint
         run: |
-          sudo wget -qO /usr/local/bin/hadolint \
-            https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
-          sudo chmod +x /usr/local/bin/hadolint
+          set -euo pipefail
+          HADOLINT_VERSION="v2.12.0"
+          HADOLINT_BIN="hadolint-Linux-x86_64"
+          HADOLINT_BASE_URL="https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}"
+          curl -fsSL -o "/tmp/${HADOLINT_BIN}" "${HADOLINT_BASE_URL}/${HADOLINT_BIN}"
+          curl -fsSL -o /tmp/hadolint-checksums.txt "${HADOLINT_BASE_URL}/hadolint-checksums.txt"
+          grep " ${HADOLINT_BIN}$" /tmp/hadolint-checksums.txt > /tmp/hadolint.sha256
+          (cd /tmp && sha256sum -c /tmp/hadolint.sha256)
+          sudo install -m 0755 "/tmp/${HADOLINT_BIN}" /usr/local/bin/hadolint
       - name: Lint Dockerfile
         run: |
           hadolint alpaca-mcp.Dockerfile
@@ -93,19 +99,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate log JSON schema keys are defined in default.conf
+      - name: Validate log format uses JSON escaping and required keys in default.conf
         run: |
           set -euo pipefail
-          for conf in default.conf; do
-            for key in time_local remote_addr request status body_bytes_sent \
-                       request_time upstream_response_time request_body resp_body; do
-              if ! grep -q "\"${key}\"" "$conf"; then
-                echo "FAIL: key '${key}' missing from $conf log format"
-                exit 1
-              fi
-            done
+          conf="default.conf"
+          if ! grep -Eq 'log_format[[:space:]]+json_full[[:space:]]+escape=json' "$conf"; then
+            echo "FAIL: $conf must define json_full with escape=json to prevent log injection"
+            exit 1
+          fi
+          for key in time_local remote_addr request status body_bytes_sent \
+                     request_time upstream_response_time request_body resp_body; do
+            if ! grep -q "\"${key}\"" "$conf"; then
+              echo "FAIL: key '${key}' missing from $conf log format"
+              exit 1
+            fi
           done
-          echo "PASS: all required log keys found in both proxy configs"
+          echo "PASS: required log keys present and escape=json enabled in $conf"
 
   # ── Trivy filesystem scan ──────────────────────────────────────────────────
   security-trivy:
@@ -124,8 +133,16 @@ jobs:
         run: docker compose --env-file .env.versions -f docker-compose.yml config --quiet
       - name: Install Trivy
         run: |
-          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sudo sh -s -- -b /usr/local/bin
+          set -euo pipefail
+          TRIVY_VERSION="0.56.2"
+          TRIVY_TARBALL="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          TRIVY_BASE_URL="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          curl -fsSL -o "/tmp/${TRIVY_TARBALL}" "${TRIVY_BASE_URL}/${TRIVY_TARBALL}"
+          curl -fsSL -o /tmp/trivy-checksums.txt "${TRIVY_BASE_URL}/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " ${TRIVY_TARBALL}$" /tmp/trivy-checksums.txt > /tmp/trivy.sha256
+          (cd /tmp && sha256sum -c /tmp/trivy.sha256)
+          tar -xzf "/tmp/${TRIVY_TARBALL}" -C /tmp trivy
+          sudo install -m 0755 /tmp/trivy /usr/local/bin/trivy
       - name: Debug Trivy version and DB
         run: |
           trivy --version
@@ -195,6 +212,23 @@ jobs:
         run: pip install checkov
       - name: Run Checkov
         run: checkov --directory . --framework dockerfile,github_actions,yaml --quiet
+
+  # ── Python dependency security scan ─────────────────────────────────────────
+  security-python-audit:
+    name: pip-audit (Python dependencies)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pip-audit
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pip-audit
+      - name: Run pip-audit
+        run: |
+          set -euo pipefail
+          pip-audit -r hash-pip/requirements-runtime.txt
+          printf 'alpaca-mcp-server==2.0.1\n' > /tmp/requirements-alpaca-mcp.txt
+          pip-audit -r /tmp/requirements-alpaca-mcp.txt
 
   # ── Secrets detection ──────────────────────────────────────────────────────
   security-gitleaks:
@@ -267,7 +301,7 @@ jobs:
   build-secure-push-test:
     name: Build -> Secure -> Push -> Test (ECR Public)
     runs-on: ubuntu-latest
-    needs: [test-lua, test-shell, log-schema-validation]
+    needs: [test-lua, test-shell, log-schema-validation, security-trivy, security-python-audit]
     permissions:
       contents: read
       id-token: write
@@ -302,44 +336,6 @@ jobs:
           set -euo pipefail
           docker push public.ecr.aws/e2u9m9o7/agent-provost:latest
           docker push public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}
-      - name: Install Trivy
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sudo sh -s -- -b /usr/local/bin
-      - name: Step 5 (Security Tests) - Debug Trivy version and DB
-        run: |
-          trivy --version
-          trivy image --download-db-only
-      - name: Step 5 (Security Tests) - Trivy filesystem scan
-        run: |
-          set +e
-          trivy fs --exit-code 1 --severity CRITICAL,HIGH .
-          echo "TRIVY_FS_STATUS=$?" >> "$GITHUB_ENV"
-      - name: Step 5 (Security Tests) - Pull and build additional images for scan
-        run: |
-          set -euo pipefail
-          docker compose --env-file .env.versions -f docker-compose.yml pull agent-provost
-      - name: Step 5 (Security Tests) - Trivy image scan (agent-provost)
-        run: |
-          set +e
-          trivy image --exit-code 1 --severity CRITICAL,HIGH "${OPENRESTY_IMAGE}" > /tmp/trivy-openresty.txt 2>&1
-          trivy_openresty_status=$?
-          cat /tmp/trivy-openresty.txt
-          echo "TRIVY_OPENRESTY_STATUS=${trivy_openresty_status}" >> "$GITHUB_ENV"
-          TRIVY_OPENRESTY_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]{4,}" /tmp/trivy-openresty.txt | sort -u | paste -sd, -)"
-          echo "TRIVY_OPENRESTY_CVES=${TRIVY_OPENRESTY_CVES:-none-found}" >> "$GITHUB_ENV"
-          trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-openresty.json "${OPENRESTY_IMAGE}" >/dev/null 2>&1 || true
-      - name: Step 5 (Security Tests) - Trivy image scan (alpaca-mcp build output)
-        run: |
-          set +e
-          docker image inspect "public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}" >/dev/null
-          trivy image --exit-code 1 --severity CRITICAL,HIGH "public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}" > /tmp/trivy-alpaca-mcp.txt 2>&1
-          trivy_alpaca_status=$?
-          cat /tmp/trivy-alpaca-mcp.txt
-          echo "TRIVY_ALPACA_MCP_STATUS=${trivy_alpaca_status}" >> "$GITHUB_ENV"
-          TRIVY_ALPACA_MCP_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]{4,}" /tmp/trivy-alpaca-mcp.txt | sort -u | paste -sd, -)"
-          echo "TRIVY_ALPACA_MCP_CVES=${TRIVY_ALPACA_MCP_CVES:-none-found}" >> "$GITHUB_ENV"
-          trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-alpaca-mcp.json "public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}" >/dev/null 2>&1 || true
       - name: Step 5 (Sanity/Integration Tests)
         run: |
           set -euo pipefail
@@ -347,30 +343,6 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y bats
           bats tests/shell/
-      - name: Step 6 (Security Gate) - Fail if any Trivy scan failed
-        if: always()
-        run: |
-          JQ_CVE='.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL") | "  [\(.Severity)] \(.VulnerabilityID)\n    Package: \(.PkgName) \(.InstalledVersion)  Fix: \(.FixedVersion // "no fix available")\n    Title:   \(.Title // ((.Description // "")[0:120]) // "no title")\n    NVD:     https://nvd.nist.gov/vuln/detail/\(.VulnerabilityID)"'
-          # Mock harness images are demo-only and excluded from gate
-          failed=0
-          if [ "${TRIVY_FS_STATUS:-0}" -ne 0 ]; then
-            failed=1
-            echo "::error title=Trivy scan failed::Filesystem scan has HIGH/CRITICAL findings."
-          fi
-          if [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ]; then
-            failed=1
-            echo "::error title=Trivy scan failed::Image ${OPENRESTY_IMAGE} has HIGH/CRITICAL CVEs: ${TRIVY_OPENRESTY_CVES:-unavailable}"
-            [ -f /tmp/trivy-openresty.json ] && jq -r "$JQ_CVE" /tmp/trivy-openresty.json 2>/dev/null || true
-          fi
-          if [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
-            failed=1
-            echo "::error title=Trivy scan failed::Image public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG} has HIGH/CRITICAL CVEs: ${TRIVY_ALPACA_MCP_CVES:-unavailable}"
-            [ -f /tmp/trivy-alpaca-mcp.json ] && jq -r "$JQ_CVE" /tmp/trivy-alpaca-mcp.json 2>/dev/null || true
-          fi
-          if [ "${failed}" -ne 0 ]; then
-            echo "One or more Trivy scans failed."
-            exit 1
-          fi
       - name: Tear down compose stack
         if: always()
         run: docker compose --env-file .env.versions down -v --remove-orphans
