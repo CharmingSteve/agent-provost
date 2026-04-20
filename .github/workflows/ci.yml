@@ -344,6 +344,9 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y bats
           bats tests/shell/
+      - name: Capture fluent-bit logs on failure
+        if: failure()
+        run: docker logs fluent-bit 2>&1 || true
       - name: Tear down compose stack
         if: always()
         run: docker compose --env-file .env.versions down -v --remove-orphans
