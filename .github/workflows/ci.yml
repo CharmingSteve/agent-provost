@@ -225,9 +225,9 @@ jobs:
       - name: Run pip-audit
         run: |
           set -euo pipefail
-          pip-audit -r hash-pip/requirements-runtime.txt
+          pip-audit --no-deps -r hash-pip/requirements-runtime.txt
           printf 'alpaca-mcp-server==2.0.1\n' > /tmp/requirements-alpaca-mcp.txt
-          pip-audit -r /tmp/requirements-alpaca-mcp.txt
+          pip-audit --no-deps -r /tmp/requirements-alpaca-mcp.txt
 
   # ── Secrets detection ──────────────────────────────────────────────────────
   security-gitleaks:
