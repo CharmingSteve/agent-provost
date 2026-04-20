@@ -338,6 +338,8 @@ jobs:
       - name: Step 5 (Sanity/Integration Tests)
         run: |
           set -euo pipefail
+          mkdir -p logs/fluent-bit-storage
+          chmod 777 logs/fluent-bit-storage
           docker compose --env-file .env.versions up -d
           sudo apt-get update -q
           sudo apt-get install -y bats
