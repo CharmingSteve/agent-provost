@@ -13,6 +13,14 @@
       "limit": 50000
     }
   },
+  "cumulative_trade_notional": {
+    "enabled": true,
+    "description": "Block cumulative dollar exposure across multiple orders within a short rolling window.",
+    "params": {
+      "limit": 50000,
+      "window_seconds": 300
+    }
+  },
   "blocked_tickers": {
     "enabled": true,
     "description": "Block trades on tickers that appear in the restricted symbol list. Prevents unauthorized exposure to specific securities.",

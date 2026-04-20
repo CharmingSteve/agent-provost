@@ -59,17 +59,6 @@ local function normalize_ticker(args)
         or "")
 end
 
--- check_request evaluates a decoded request body against the rules table.
---
--- @param  parsed  table|nil  Decoded JSON request body (output of cjson.decode).
--- @param  rules   table|nil  Rules table from shared dict.  Nil is treated as
---                            an empty table (fail-open: no rules applied).
--- @return blocked bool       true when the request must be blocked.
--- @return reason  string|nil Human-readable PROVOST_INTERVENTION message, or
---                            nil when not blocked.
-function _M.check_request(parsed, rules)
-    rules = rules or {}
-
 local function normalize_notional(args)
     if type(args) ~= "table" then
         return nil
@@ -83,6 +72,79 @@ local function normalize_limit_price(args)
     end
     return tonumber(args.limit_price)
 end
+
+local function estimate_order_value(args)
+    local limit_price = normalize_limit_price(args)
+    local notional = normalize_notional(args)
+    if notional ~= nil and notional > 0 then
+        return notional, notional, nil, limit_price
+    end
+
+    local qty = normalize_quantity(args)
+    if qty ~= nil and qty > 0 and limit_price ~= nil and limit_price > 0 then
+        return qty * limit_price, nil, qty, limit_price
+    end
+
+    return nil, notional, qty, limit_price
+end
+
+local function get_cumulative_exposure_key(context, args)
+    if type(context) ~= "table" then
+        return nil
+    end
+    local user = context.user
+    local machine = context.machine
+    if type(user) ~= "string" or user == "" or type(machine) ~= "string" or machine == "" then
+        return nil
+    end
+
+    local ticker = normalize_ticker(args)
+    if ticker == "" then
+        ticker = "ALL"
+    end
+
+    return "cum_notional:" .. user .. ":" .. machine .. ":" .. ticker
+end
+
+local function resolve_context(context)
+    if type(context) == "table" then
+        return context
+    end
+
+    if type(ngx) ~= "table" then
+        return nil
+    end
+
+    local var = ngx.var or {}
+    local shared = ngx.shared or {}
+    local user = var.http_x_provost_user
+    local machine = var.http_x_provost_machine
+
+    if (not user or user == "") and type(shared.provost_ctx) == "table" then
+        user = shared.provost_ctx:get("last:user")
+    end
+    if (not machine or machine == "") and type(shared.provost_ctx) == "table" then
+        machine = shared.provost_ctx:get("last:machine")
+    end
+
+    return {
+        user = user,
+        machine = machine,
+        store = shared.provost_ctx
+    }
+end
+
+-- check_request evaluates a decoded request body against the rules table.
+--
+-- @param  parsed  table|nil  Decoded JSON request body (output of cjson.decode).
+-- @param  rules   table|nil  Rules table from shared dict.  Nil is treated as
+--                            an empty table (fail-open: no rules applied).
+-- @return blocked bool       true when the request must be blocked.
+-- @return reason  string|nil Human-readable PROVOST_INTERVENTION message, or
+--                            nil when not blocked.
+function _M.check_request(parsed, rules, context)
+    rules = rules or {}
+    context = resolve_context(context)
 
 -- check_request evaluates a decoded request body against the rules table.
     -- No parseable body or wrong shape: pass through.
@@ -145,16 +207,7 @@ end
         end
 
         if limit_value and limit_value > 0 then
-            local notional = normalize_notional(args)
-            local qty = normalize_quantity(args)
-            local limit_price = normalize_limit_price(args)
-            local estimated_value = nil
-
-            if notional ~= nil and notional > 0 then
-                estimated_value = notional
-            elseif qty ~= nil and qty > 0 and limit_price ~= nil and limit_price > 0 then
-                estimated_value = qty * limit_price
-            end
+            local estimated_value, notional, _, limit_price = estimate_order_value(args)
 
             if estimated_value and estimated_value > limit_value then
                 return true,
@@ -166,6 +219,51 @@ end
                 return true,
                     "PROVOST_INTERVENTION: Risk Limit Exceeded. " ..
                     "Notional orders require limit_price for safe evaluation."
+            end
+        end
+    end
+
+    -- ----------------------------------------------------------------
+    -- Rule: cumulative_trade_notional
+    -- ----------------------------------------------------------------
+    local cumulative_rule = rules.cumulative_trade_notional
+    if type(cumulative_rule) == "table" and cumulative_rule.enabled == true then
+        local limit_value = nil
+        local window_seconds = 300
+        if type(cumulative_rule.params) == "table" then
+            limit_value = tonumber(cumulative_rule.params.limit)
+            window_seconds = tonumber(cumulative_rule.params.window_seconds) or window_seconds
+        end
+
+        if limit_value and limit_value > 0 and window_seconds > 0 then
+            local estimated_value = estimate_order_value(args)
+            if estimated_value and estimated_value > 0 then
+                local exposure_key = get_cumulative_exposure_key(context, args)
+                local store = type(context) == "table" and context.store or nil
+
+                if type(store) == "table" and exposure_key ~= nil then
+                    local add_ok, add_err = store:add(exposure_key, 0, window_seconds)
+                    if not add_ok and add_err ~= "exists" and add_err ~= "not found" then
+                        return true,
+                            "PROVOST_INTERVENTION: Risk State Unavailable. " ..
+                            "Blocked to avoid untracked cumulative exposure."
+                    end
+
+                    local current = tonumber(store:get(exposure_key) or 0) or 0
+                    local new_total = current + estimated_value
+                    if new_total > limit_value then
+                        return true,
+                            "PROVOST_INTERVENTION: Cumulative Risk Limit Exceeded. " ..
+                            "Rolling trade exposure too large within active window."
+                    end
+
+                    local set_ok = store:set(exposure_key, new_total, window_seconds)
+                    if not set_ok then
+                        return true,
+                            "PROVOST_INTERVENTION: Risk State Unavailable. " ..
+                            "Blocked to avoid untracked cumulative exposure."
+                    end
+                end
             end
         end
     end
