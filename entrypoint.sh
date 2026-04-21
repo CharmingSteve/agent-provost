@@ -44,6 +44,7 @@ src = open(path).read()
 # Note: the {1,6} range is intentionally narrow and assumes upstream function size.
 # If upstream expands beyond this range, the patch step will skip replacement.
 # The window is intentionally small to avoid overmatching unrelated functions.
+# Skip behavior is surfaced via the explicit "[patch] ... skipping." log below.
 pattern = r"def _get_trading_base_url\(\) -> str:\n(?:    .*\n){1,6}"
 # Define replacement block that adds TRADE_API_URL override support.
 new_block = (
@@ -73,4 +74,5 @@ echo "[entrypoint] Starting MCP Server with streamable-http transport..."
 # Binding to 0.0.0.0 is intentional in containers so mapped ports are reachable.
 # Because this exposes all container interfaces, enforce access controls via network policy/firewalls.
 # This entrypoint does not add network auth controls at bind time; rely on upstream proxy/platform controls.
+# Application-level authentication/authorization should also be enforced by the deployed stack.
 exec uv run --no-project alpaca-mcp-server --transport streamable-http --host 0.0.0.0 --port 8088
