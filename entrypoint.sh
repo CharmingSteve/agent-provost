@@ -36,11 +36,12 @@ python - "$SERVER_PY" <<'PYEOF'
 import re
 # Read the file path argument passed from the shell.
 import sys
-# Get target path from argv.
+# Retrieve the target server.py path passed from the shell wrapper.
 path = sys.argv[1]
 # Load the current server.py source.
 src = open(path).read()
 # Match the existing _get_trading_base_url function block.
+# Note: the {1,6} range is intentionally narrow and assumes upstream function size.
 pattern = r"def _get_trading_base_url\(\) -> str:\n(?:    .*\n){1,6}"
 # Define replacement block that adds TRADE_API_URL override support.
 new_block = (
@@ -67,4 +68,5 @@ PYEOF
 # Inform startup logs that process handoff is about to happen.
 echo "[entrypoint] Starting MCP Server with streamable-http transport..."
 # Replace shell process with the MCP server process (PID 1 handoff).
+# Binding to 0.0.0.0 is intentional in containers so mapped ports are reachable.
 exec uv run --no-project alpaca-mcp-server --transport streamable-http --host 0.0.0.0 --port 8088
