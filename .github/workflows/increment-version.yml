@@ -20,11 +20,11 @@ jobs:
           fetch-depth: 0
 
       - name: Bump only patch in version.txt and push to PR branch
-         shell: bash
-         env:
-           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-           PR_NUMBER: ${{ github.event.pull_request.number }}
-         run: |
+        shell: bash
+        env:
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
            set -euo pipefail
 
            git fetch origin main

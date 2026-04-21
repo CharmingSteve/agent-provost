@@ -21,6 +21,8 @@ services:
       - mcp_internal
     security_opt:
       - no-new-privileges:true
+    user: "10001:10001"
+    read_only: true
     cap_drop:
       - ALL
     tmpfs:
@@ -30,7 +32,6 @@ services:
 
   fluent-bit:
     image: ${FLUENT_BIT_IMAGE}
-    platform: linux/amd64
     container_name: fluent-bit
     command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
     volumes:
@@ -54,6 +55,8 @@ services:
       - proxy_egress
     security_opt:
       - no-new-privileges:true
+    user: "65532:65532"
+    read_only: true
     cap_drop:
       - ALL
     tmpfs:
@@ -63,7 +66,7 @@ services:
 
   agent-provost:
     # Pinned digest from OpenResty tag: openresty/openresty:1.29.2.3-alpine
-    # (multi-arch index for linux/amd64 + linux/arm64; image labels show resty_version=1.29.2.3).
+    # (multi-arch index for linux/arm64 image labels show resty_version=1.29.2.3).
     # Note: this tag can move over time, so always copy the digest for the exact tag/revision you want.
     # Example: docker manifest inspect openresty/openresty:1.29.2.3-alpine --verbose
     # Digest is sourced from .env.versions via: docker compose --env-file .env.versions ...
@@ -89,6 +92,10 @@ services:
       - proxy_egress
     security_opt:
       - no-new-privileges:true
+    user: "65532:65532"
+    read_only: true
+    cap_drop:
+      - ALL
     tmpfs:
       - /tmp
     pids_limit: 256
