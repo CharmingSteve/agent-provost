@@ -155,6 +155,7 @@ jobs:
         run: |
           set -euo pipefail
           docker compose --env-file .env.versions -f docker-compose.yml pull agent-provost
+          docker pull "${FLUENT_BIT_IMAGE}"
           docker compose --env-file .env.versions -f docker-compose.yml build alpaca-mcp
       - name: Trivy image scan (agent-provost)
         run: |
@@ -177,6 +178,17 @@ jobs:
           TRIVY_ALPACA_MCP_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]{4,}" /tmp/trivy-alpaca-mcp.txt | sort -u | paste -sd, -)"
           echo "TRIVY_ALPACA_MCP_CVES=${TRIVY_ALPACA_MCP_CVES:-none-found}" >> "$GITHUB_ENV"
           trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-alpaca-mcp.json "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}" >/dev/null 2>&1 || true
+      - name: Trivy image scan (fluent-bit)
+        run: |
+          set +e
+          docker image inspect "${FLUENT_BIT_IMAGE}" >/dev/null
+          trivy image --exit-code 1 --severity CRITICAL,HIGH "${FLUENT_BIT_IMAGE}" > /tmp/trivy-fluent-bit.txt 2>&1
+          trivy_fluent_bit_status=$?
+          cat /tmp/trivy-fluent-bit.txt
+          echo "TRIVY_FLUENT_BIT_STATUS=${trivy_fluent_bit_status}" >> "$GITHUB_ENV"
+          TRIVY_FLUENT_BIT_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]{4,}" /tmp/trivy-fluent-bit.txt | sort -u | paste -sd, -)"
+          echo "TRIVY_FLUENT_BIT_CVES=${TRIVY_FLUENT_BIT_CVES:-none-found}" >> "$GITHUB_ENV"
+          trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-fluent-bit.json "${FLUENT_BIT_IMAGE}" >/dev/null 2>&1 || true
       - name: Fail if any Trivy scan failed
         run: |
           JQ_CVE='.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL") | "  [\(.Severity)] \(.VulnerabilityID)\n    Package: \(.PkgName) \(.InstalledVersion)  Fix: \(.FixedVersion // "no fix available")\n    Title:   \(.Title // ((.Description // "")[0:120]) // "no title")\n    NVD:     https://nvd.nist.gov/vuln/detail/\(.VulnerabilityID)"'
@@ -195,6 +207,11 @@ jobs:
             failed=1
             echo "::error title=Trivy scan failed::Image agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG} has HIGH/CRITICAL CVEs: ${TRIVY_ALPACA_MCP_CVES:-unavailable}"
             [ -f /tmp/trivy-alpaca-mcp.json ] && jq -r "$JQ_CVE" /tmp/trivy-alpaca-mcp.json 2>/dev/null || true
+          fi
+          if [ "${TRIVY_FLUENT_BIT_STATUS:-0}" -ne 0 ]; then
+            failed=1
+            echo "::error title=Trivy scan failed::Image ${FLUENT_BIT_IMAGE} has HIGH/CRITICAL CVEs: ${TRIVY_FLUENT_BIT_CVES:-unavailable}"
+            [ -f /tmp/trivy-fluent-bit.json ] && jq -r "$JQ_CVE" /tmp/trivy-fluent-bit.json 2>/dev/null || true
           fi
           if [ "${failed}" -ne 0 ]; then
             echo "One or more Trivy scans failed."
