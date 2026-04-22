@@ -60,9 +60,9 @@
   [ "$status" -eq 0 ]
   run grep -E '^    runs-on: ubuntu-24.04-arm$' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E 'docker compose --env-file .\.env\.versions pull' .github/workflows/ci.yml
+  run grep -E 'docker compose --env-file \.env\.versions pull' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E 'docker compose --env-file .\.env\.versions up -d' .github/workflows/ci.yml
+  run grep -E 'docker compose --env-file \.env\.versions up -d' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
   run grep -E 'docker compose --env-file \.env\.versions down -v --remove-orphans' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
