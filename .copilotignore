@@ -1,0 +1,15 @@
+LICENSE
+
+# Local/editor noise
+.DS_Store
+.vscode/
+.idea/
+
+# Build/cache artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+mypy_cache/
+dist/
+build/
+*.egg-info/
