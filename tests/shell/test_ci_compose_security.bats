@@ -58,6 +58,8 @@
 @test "CI includes always-on compose smoke gate" {
   run grep -E '^  compose-smoke:' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
+  run grep -E '^    runs-on: ubuntu-24.04-arm$' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
   run grep -E 'docker compose --env-file \.env\.versions up -d --build' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
   run grep -E 'docker compose --env-file \.env\.versions down -v --remove-orphans' .github/workflows/ci.yml
