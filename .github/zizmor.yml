@@ -1,0 +1,12 @@
+rules:
+  dangerous-triggers:
+    ignore:
+      - increment-version.yml:3
+  unpinned-uses:
+    ignore:
+      - ci.yml
+      - increment-version.yml
+  artipacked:
+    ignore:
+      - ci.yml
+      - increment-version.yml

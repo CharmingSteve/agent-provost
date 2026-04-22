@@ -92,6 +92,42 @@ jobs:
       - name: Run bats tests
         run: bats tests/shell/
 
+  # ── GitHub Actions workflow linting ──────────────────────────────────────
+  lint-github-actions:
+    name: actionlint (GitHub Actions)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          ACTIONLINT_VERSION="1.7.12"
+          ACTIONLINT_TARBALL="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          ACTIONLINT_BASE_URL="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+          curl -fsSL -o "/tmp/${ACTIONLINT_TARBALL}" "${ACTIONLINT_BASE_URL}/${ACTIONLINT_TARBALL}"
+          tar -xzf "/tmp/${ACTIONLINT_TARBALL}" -C /tmp actionlint
+          sudo install -m 0755 /tmp/actionlint /usr/local/bin/actionlint
+      - name: Lint workflow files
+        run: |
+          set -euo pipefail
+          actionlint
+
+  # ── GitHub Actions workflow security linting ─────────────────────────────
+  security-zizmor:
+    name: zizmor (GitHub Actions security)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install zizmor
+        run: |
+          set -euo pipefail
+          python3 -m pip install --upgrade pip
+          python3 -m pip install zizmor==1.24.1
+      - name: Scan workflow files
+        run: |
+          set -euo pipefail
+          zizmor .github/workflows/
+
   # ── Log schema validation ──────────────────────────────────────────────────
   log-schema-validation:
     name: Log schema validation
@@ -357,7 +393,7 @@ jobs:
   build-secure-push-test:
     name: Build -> Secure -> Push -> Test (ECR Public)
     runs-on: ubuntu-24.04-arm
-    needs: [test-lua, test-shell, log-schema-validation, compose-smoke, security-trivy, security-python-audit]
+    needs: [test-lua, test-shell, lint-github-actions, security-zizmor, log-schema-validation, compose-smoke, security-trivy, security-python-audit]
     permissions:
       contents: read
       id-token: write
