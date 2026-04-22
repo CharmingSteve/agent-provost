@@ -125,20 +125,24 @@ jobs:
       - name: Stage dummy secrets for compose runtime
         run: |
           eval "$(sh bootstrap.sh runner)"
+      - name: Ensure local dirs for bind mounts
+        run: |
+          mkdir -p logs/fluent-bit-storage
+          chmod -R a+rwx logs/fluent-bit-storage
       - name: Bring up compose stack
         run: |
           set -euo pipefail
-            set +e
+          set +e
+          docker compose --env-file .env.versions up -d --build
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "::warning::Initial compose startup failed; collecting diagnostics and retrying once"
+            docker compose --env-file .env.versions ps -a || true
+            docker compose --env-file .env.versions logs --tail 120 fluent-bit agent-provost alpaca-mcp || true
+            docker compose --env-file .env.versions down -v --remove-orphans || true
             docker compose --env-file .env.versions up -d --build
-            rc=$?
-            set -e
-            if [ "$rc" -ne 0 ]; then
-              echo "::warning::Initial compose startup failed; collecting diagnostics and retrying once"
-              docker compose --env-file .env.versions ps -a || true
-              docker compose --env-file .env.versions logs --tail 120 fluent-bit agent-provost alpaca-mcp || true
-              docker compose --env-file .env.versions down -v --remove-orphans || true
-              docker compose --env-file .env.versions up -d --build
-            fi
+          fi
       - name: Check compose service states
         run: |
           set -euo pipefail
