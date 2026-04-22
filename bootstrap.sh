@@ -5,12 +5,28 @@ set -e
 
 MODE="${1:-dev}"
 ENV_FILE=".env"
+LOCAL_FALLBACK_SECRETS_DIR=".secrets"
 
 write_secret_file() {
   value="$1"
   path="$2"
   printf '%s' "$value" > "$path"
   chmod 600 "$path"
+}
+
+sync_local_fallback_secrets() {
+  src_dir="$1"
+  mkdir -p "$LOCAL_FALLBACK_SECRETS_DIR"
+  chmod 700 "$LOCAL_FALLBACK_SECRETS_DIR"
+  cp "$src_dir/alpaca_api_key" "$LOCAL_FALLBACK_SECRETS_DIR/alpaca_api_key"
+  cp "$src_dir/alpaca_secret_key" "$LOCAL_FALLBACK_SECRETS_DIR/alpaca_secret_key"
+  cp "$src_dir/alpaca_paper_trade" "$LOCAL_FALLBACK_SECRETS_DIR/alpaca_paper_trade"
+  if [ ! -f "$LOCAL_FALLBACK_SECRETS_DIR/provost_token" ]; then
+    cp "$src_dir/provost_token" "$LOCAL_FALLBACK_SECRETS_DIR/provost_token"
+  fi
+  chmod 600 "$LOCAL_FALLBACK_SECRETS_DIR/alpaca_api_key" \
+    "$LOCAL_FALLBACK_SECRETS_DIR/alpaca_secret_key" \
+    "$LOCAL_FALLBACK_SECRETS_DIR/alpaca_paper_trade"
 }
 
 env_get() {
@@ -92,6 +108,7 @@ case "$MODE" in
     write_secret_file "${ALPACA_SECRET_KEY:-}" "$PROVOST_SECRETS_DIR/alpaca_secret_key"
     write_secret_file "${ALPACA_PAPER_TRADE:-true}" "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
     write_secret_file "${PROVOST_TOKEN_VALUE:-dev-provost-token}" "$PROVOST_SECRETS_DIR/provost_token"
+    sync_local_fallback_secrets "$PROVOST_SECRETS_DIR"
 
     echo "export PROVOST_SECRETS_DIR='$PROVOST_SECRETS_DIR'"
     echo "export PROVOST_RUN_DIR='$PROVOST_RUN_DIR'"
@@ -122,6 +139,7 @@ case "$MODE" in
     write_secret_file "$SECRET_KEY" "$PROVOST_SECRETS_DIR/alpaca_secret_key"
     write_secret_file "$PAPER_TRADE" "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
     write_secret_file "$PROVOST_TOKEN_VALUE" "$PROVOST_SECRETS_DIR/provost_token"
+    sync_local_fallback_secrets "$PROVOST_SECRETS_DIR"
 
     echo "export PROVOST_SECRETS_DIR='$PROVOST_SECRETS_DIR'"
     echo "export PROVOST_RUN_DIR='$PROVOST_RUN_DIR'"
@@ -167,6 +185,7 @@ case "$MODE" in
     write_secret_file "$SECRET_KEY" "$PROVOST_SECRETS_DIR/alpaca_secret_key"
     write_secret_file "$PAPER_TRADE" "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
     write_secret_file "$PROVOST_TOKEN_VALUE" "$PROVOST_SECRETS_DIR/provost_token"
+    sync_local_fallback_secrets "$PROVOST_SECRETS_DIR"
 
     echo "export PROVOST_SECRETS_DIR='$PROVOST_SECRETS_DIR'"
     echo "export PROVOST_RUN_DIR='$PROVOST_RUN_DIR'"
