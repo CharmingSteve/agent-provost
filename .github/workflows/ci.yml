@@ -132,6 +132,8 @@ jobs:
       - name: Bring up compose stack
         run: |
           set -euo pipefail
+          export ALPACA_API_KEY="dummy"
+          export ALPACA_SECRET_KEY="dummy"
           set +e
           docker compose --env-file .env.versions up -d --build
           rc=$?
@@ -393,6 +395,8 @@ jobs:
       - name: Step 5 (Sanity/Integration Tests)
         run: |
           set -euo pipefail
+          export ALPACA_API_KEY="dummy"
+          export ALPACA_SECRET_KEY="dummy"
           mkdir -p logs/fluent-bit-storage
            chmod -R a+rwx logs/fluent-bit-storage
           docker compose --env-file .env.versions up -d

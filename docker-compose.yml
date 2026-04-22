@@ -15,6 +15,8 @@ services:
       TRADE_API_URL: "http://agent-provost:8081/trading"
       DATA_API_URL: "http://agent-provost:8081/data"
       BROKER_API_URL: "http://agent-provost:8081/broker"
+      ALPACA_API_KEY: ${ALPACA_API_KEY:-}
+      ALPACA_SECRET_KEY: ${ALPACA_SECRET_KEY:-}
     expose:
       - "8088"
     networks:
