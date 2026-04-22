@@ -29,6 +29,17 @@ sync_local_fallback_secrets() {
     "$LOCAL_FALLBACK_SECRETS_DIR/alpaca_paper_trade"
 }
 
+is_true() {
+  case "${1:-}" in
+    true|TRUE|True|1|yes|YES|on|ON)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 env_get() {
   key="$1"
   file="$2"
@@ -139,7 +150,12 @@ case "$MODE" in
     write_secret_file "$SECRET_KEY" "$PROVOST_SECRETS_DIR/alpaca_secret_key"
     write_secret_file "$PAPER_TRADE" "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
     write_secret_file "$PROVOST_TOKEN_VALUE" "$PROVOST_SECRETS_DIR/provost_token"
-    sync_local_fallback_secrets "$PROVOST_SECRETS_DIR"
+
+    # Production safety default: do not copy real secrets into repo-local .secrets
+    # unless explicitly requested for break-glass troubleshooting.
+    if is_true "${ALLOW_EC2_LOCAL_FALLBACK_SECRETS:-false}"; then
+      sync_local_fallback_secrets "$PROVOST_SECRETS_DIR"
+    fi
 
     echo "export PROVOST_SECRETS_DIR='$PROVOST_SECRETS_DIR'"
     echo "export PROVOST_RUN_DIR='$PROVOST_RUN_DIR'"

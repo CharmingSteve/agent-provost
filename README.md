@@ -271,8 +271,17 @@ The sovereign mock harness is not included in this branch. Use the separate demo
 - If clients call MCP directly (or MCP calls Alpaca directly), those paths will not be represented in both hop logs.
 - Error logs are expected to be empty during normal operation and will populate only when proxy/upstream errors occur.
 
+## Security Decision Record
+
+- Decision: keep `alpaca-mcp` writable temporarily; keep `fluent-bit` and `agent-provost` read-only.
+- Why writable is required: `entrypoint.sh` applies a runtime patch to `alpaca_mcp_server/server.py` so `TRADE_API_URL` override routing is enforced.
+- Compensating controls: non-root users, `no-new-privileges`, dropped Linux capabilities, tmpfs for `/tmp`, pinned images/dependencies, and CI security scans (Trivy/Checkov/pip-audit/gitleaks).
+- Owner: Steve (repo owner).
+- Deadline to remove exception: migrate patching to Docker build stage by `v0.3.0` (target date: 2026-05-31), then set `alpaca-mcp` to read-only.
+
 ---
 
 *Agent Provost is an open-source project aimed at making autonomous finance safer for everyone. If you find this useful, please **Star** the repository and contribute your safety logic ideas!*
 
 Temporary validation line for version bump workflow.
+record

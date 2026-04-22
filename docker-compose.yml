@@ -22,7 +22,6 @@ services:
     security_opt:
       - no-new-privileges:true
     user: "10001:10001"
-    read_only: true
     cap_drop:
       - ALL
     tmpfs:
@@ -63,12 +62,7 @@ services:
       - /tmp
     pids_limit: 256
     restart: unless-stopped
-
   agent-provost:
-    # Pinned digest from OpenResty tag: openresty/openresty:1.29.2.3-alpine
-    # (multi-arch index for linux/arm64 image labels show resty_version=1.29.2.3).
-    # Note: this tag can move over time, so always copy the digest for the exact tag/revision you want.
-    # Example: docker manifest inspect openresty/openresty:1.29.2.3-alpine --verbose
     # Digest is sourced from .env.versions via: docker compose --env-file .env.versions ...
     image: ${OPENRESTY_IMAGE}
     container_name: agent-provost

@@ -115,6 +115,31 @@ jobs:
           done
           echo "PASS: required log keys present and escape=json enabled in $conf"
 
+  # ── Compose smoke test (always-on) ────────────────────────────────────────
+  compose-smoke:
+    name: Compose smoke (up/health/down)
+    runs-on: ubuntu-latest
+    needs: [test-lua, test-shell, log-schema-validation]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage dummy secrets for compose runtime
+        run: |
+          eval "$(sh bootstrap.sh runner)"
+      - name: Bring up compose stack
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.versions up -d --build
+      - name: Check compose service states
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.versions ps
+          [ "$(docker inspect -f '{{.State.Status}}' alpaca-mcp)" = "running" ]
+          [ "$(docker inspect -f '{{.State.Status}}' agent-provost)" = "running" ]
+          [ "$(docker inspect -f '{{.State.Health.Status}}' fluent-bit)" = "healthy" ]
+      - name: Tear down compose stack
+        if: always()
+        run: docker compose --env-file .env.versions down -v --remove-orphans
+
   # ── Trivy filesystem scan ──────────────────────────────────────────────────
   security-trivy:
     name: Trivy (filesystem / image scan)
@@ -317,7 +342,7 @@ jobs:
   build-secure-push-test:
     name: Build -> Secure -> Push -> Test (ECR Public)
     runs-on: ubuntu-24.04-arm
-    needs: [test-lua, test-shell, log-schema-validation, security-trivy, security-python-audit]
+    needs: [test-lua, test-shell, log-schema-validation, compose-smoke, security-trivy, security-python-audit]
     permissions:
       contents: read
       id-token: write
