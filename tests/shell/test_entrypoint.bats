@@ -97,3 +97,23 @@
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }
+
+# ── bootstrap.sh ─────────────────────────────────────────────────────────────
+
+@test "bootstrap.sh: defines truthy helper for flag parsing" {
+    run grep -c "^is_true()" bootstrap.sh
+    [ "$status" -eq 0 ]
+    [ "$output" -ge 1 ]
+}
+
+@test "bootstrap.sh: ec2 fallback copy requires explicit ALLOW_EC2_LOCAL_FALLBACK_SECRETS" {
+    run grep -c 'if is_true "\${ALLOW_EC2_LOCAL_FALLBACK_SECRETS:-false}"; then' bootstrap.sh
+    [ "$status" -eq 0 ]
+    [ "$output" -ge 1 ]
+}
+
+@test "bootstrap.sh: dev and runner still sync local fallback secrets" {
+    run grep -c '^    sync_local_fallback_secrets "\$PROVOST_SECRETS_DIR"$' bootstrap.sh
+    [ "$status" -eq 0 ]
+    [ "$output" -ge 2 ]
+}

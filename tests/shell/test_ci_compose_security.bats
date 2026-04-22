@@ -55,6 +55,17 @@
   [ "$status" -eq 0 ]
 }
 
+@test "CI includes always-on compose smoke gate" {
+  run grep -E '^  compose-smoke:' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^    runs-on: ubuntu-24.04-arm$' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'docker compose --env-file \.env\.versions up -d --build' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'docker compose --env-file \.env\.versions down -v --remove-orphans' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+}
+
 @test "CI does not contain stale hardcoded openresty SHA" {
   run grep -F '4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50' .github/workflows/ci.yml
   [ "$status" -ne 0 ]
@@ -65,8 +76,8 @@
   [ "$status" -eq 0 ]
 }
 
-@test "build-secure-push-test depends on security-trivy and python audit jobs" {
-  run grep -E 'needs: \[test-lua, test-shell, log-schema-validation, security-trivy, security-python-audit\]' .github/workflows/ci.yml
+@test "build-secure-push-test depends on compose-smoke and security jobs" {
+  run grep -E 'needs: \[test-lua, test-shell, log-schema-validation, compose-smoke, security-trivy, security-python-audit\]' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 

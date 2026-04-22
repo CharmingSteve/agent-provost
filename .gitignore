@@ -48,6 +48,8 @@ mypy_cache/
 .env
 !.env.versions
 local_settings.py
+.secrets/
+.provost-run/
 
 # Package managers
 node_modules/
