@@ -128,7 +128,17 @@ jobs:
       - name: Bring up compose stack
         run: |
           set -euo pipefail
-          docker compose --env-file .env.versions up -d --build
+            set +e
+            docker compose --env-file .env.versions up -d --build
+            rc=$?
+            set -e
+            if [ "$rc" -ne 0 ]; then
+              echo "::warning::Initial compose startup failed; collecting diagnostics and retrying once"
+              docker compose --env-file .env.versions ps -a || true
+              docker compose --env-file .env.versions logs --tail 120 fluent-bit agent-provost alpaca-mcp || true
+              docker compose --env-file .env.versions down -v --remove-orphans || true
+              docker compose --env-file .env.versions up -d --build
+            fi
       - name: Check compose service states
         run: |
           set -euo pipefail
