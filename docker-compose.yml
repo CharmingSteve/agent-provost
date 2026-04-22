@@ -1,11 +1,7 @@
 services:
   alpaca-mcp:
-    build:
-      context: .
-      dockerfile: alpaca-mcp.Dockerfile
-      args:
-        BASE_PYTHON_IMAGE: ${BASE_PYTHON_IMAGE}
-    image: agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG:-latest}
+    image: ${ALPACA_IMAGE}:${ALPACA_IMAGE_TAG:-latest}
+    pull_policy: if-not-present
     container_name: alpaca-mcp
     volumes:
       - ./entrypoint.sh:/entrypoint.sh:ro
@@ -33,6 +29,7 @@ services:
 
   fluent-bit:
     image: ${FLUENT_BIT_IMAGE}
+    pull_policy: if-not-present
     container_name: fluent-bit
     command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
     volumes:
@@ -67,6 +64,7 @@ services:
   agent-provost:
     # Digest is sourced from .env.versions via: docker compose --env-file .env.versions ...
     image: ${OPENRESTY_IMAGE}
+    pull_policy: if-not-present
     container_name: agent-provost
     depends_on:
       alpaca-mcp:
