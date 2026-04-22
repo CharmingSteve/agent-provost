@@ -128,10 +128,10 @@
 }
 
 @test "docker-compose.yml has pull_policy if-not-present for alpaca-mcp" {
-  run grep -B 2 'pull_policy: if-not-present' docker-compose.yml
+  run grep -B 2 'pull_policy: if_not_present' docker-compose.yml
   [ "$status" -eq 0 ]
   # Verify it appears at least 3 times (once for each service)
-  count=$(grep -c 'pull_policy: if-not-present' docker-compose.yml)
+  count=$(grep -c 'pull_policy: if_not_present' docker-compose.yml)
   [ "$count" -ge 3 ]
 }
 
