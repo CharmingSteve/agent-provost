@@ -135,7 +135,8 @@ jobs:
           export ALPACA_API_KEY="dummy"
           export ALPACA_SECRET_KEY="dummy"
           set +e
-          docker compose --env-file .env.versions up -d --build
+          docker compose --env-file .env.versions pull
+          docker compose --env-file .env.versions up -d
           rc=$?
           set -e
           if [ "$rc" -ne 0 ]; then
@@ -143,7 +144,8 @@ jobs:
             docker compose --env-file .env.versions ps -a || true
             docker compose --env-file .env.versions logs --tail 120 fluent-bit agent-provost alpaca-mcp || true
             docker compose --env-file .env.versions down -v --remove-orphans || true
-            docker compose --env-file .env.versions up -d --build
+            docker compose --env-file .env.versions pull
+            docker compose --env-file .env.versions up -d
           fi
       - name: Check compose service states
         run: |
@@ -197,7 +199,7 @@ jobs:
           set -euo pipefail
           docker compose --env-file .env.versions -f docker-compose.yml pull agent-provost
           docker pull "${FLUENT_BIT_IMAGE}"
-          docker compose --env-file .env.versions -f docker-compose.yml build alpaca-mcp
+          docker build -f alpaca-mcp.Dockerfile --build-arg BASE_PYTHON_IMAGE="${BASE_PYTHON_IMAGE}" -t agent-provost-alpaca-mcp:"${ALPACA_IMAGE_TAG}" .
       - name: Trivy image scan (agent-provost)
         run: |
           set +e

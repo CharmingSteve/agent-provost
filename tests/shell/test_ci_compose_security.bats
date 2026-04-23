@@ -60,7 +60,9 @@
   [ "$status" -eq 0 ]
   run grep -E '^    runs-on: ubuntu-24.04-arm$' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E 'docker compose --env-file \.env\.versions up -d --build' .github/workflows/ci.yml
+  run grep -E 'docker compose --env-file \.env\.versions pull' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'docker compose --env-file \.env\.versions up -d' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
   run grep -E 'docker compose --env-file \.env\.versions down -v --remove-orphans' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
@@ -113,6 +115,24 @@
   [ "$status" -eq 0 ]
   run grep -E 'pip-audit .*hash-pip/requirements-runtime.txt' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
+}
+
+@test ".env.versions defines ALPACA_IMAGE" {
+  run grep -E '^ALPACA_IMAGE=public\.ecr\.aws/e2u9m9o7/agent-provost$' .env.versions
+  [ "$status" -eq 0 ]
+}
+
+@test "docker-compose.yml uses ALPACA_IMAGE for alpaca-mcp" {
+  run grep -E 'image:\s*\$\{ALPACA_IMAGE\}:\$\{ALPACA_IMAGE_TAG:-latest\}' docker-compose.yml
+  [ "$status" -eq 0 ]
+}
+
+@test "docker-compose.yml has pull_policy if-not-present for alpaca-mcp" {
+  run grep -B 2 'pull_policy: if_not_present' docker-compose.yml
+  [ "$status" -eq 0 ]
+  # Verify it appears at least 3 times (once for each service)
+  count=$(grep -c 'pull_policy: if_not_present' docker-compose.yml)
+  [ "$count" -ge 3 ]
 }
 
 @test "compose services are configured as non-root and read-only" {
