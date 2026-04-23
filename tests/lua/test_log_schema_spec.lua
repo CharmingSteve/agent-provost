@@ -40,6 +40,10 @@ describe("default.conf log schema", function()
     assert.is_truthy(conf:match("error_log%s+" .. sock .. ",tag=provost_mcp_to_llm_error%s+info"))
     assert.is_truthy(conf:match("error_log%s+" .. sock .. ",tag=provost_api_to_mcp_error%s+info"))
   end)
+
+  it("includes Lua audit error marker for structured error parsing", function()
+    assert.is_truthy(conf:match('require%s+"audit_error"'))
+  end)
 end)
 
 describe("access log json schema parsing", function()
