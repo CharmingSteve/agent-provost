@@ -280,16 +280,22 @@ jobs:
           if [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ]; then
             failed=1
             echo "::error title=Trivy scan failed::Image ${OPENRESTY_IMAGE} has HIGH/CRITICAL CVEs: ${TRIVY_OPENRESTY_CVES:-unavailable}"
-            [ -f /tmp/trivy-openresty.json ] && jq -r "$JQ_CVE" /tmp/trivy-openresty.json 2>/dev/null || true
+            if [ -f /tmp/trivy-openresty.json ]; then
+              jq -r "$JQ_CVE" /tmp/trivy-openresty.json 2>/dev/null || true
+            fi
           fi
           if [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
             failed=1
             echo "::error title=Trivy scan failed::Image agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG} has HIGH/CRITICAL CVEs: ${TRIVY_ALPACA_MCP_CVES:-unavailable}"
-            [ -f /tmp/trivy-alpaca-mcp.json ] && jq -r "$JQ_CVE" /tmp/trivy-alpaca-mcp.json 2>/dev/null || true
+            if [ -f /tmp/trivy-alpaca-mcp.json ]; then
+              jq -r "$JQ_CVE" /tmp/trivy-alpaca-mcp.json 2>/dev/null || true
+            fi
           fi
           if [ "${TRIVY_FLUENT_BIT_STATUS:-0}" -ne 0 ]; then
             echo "::warning title=Trivy advisory::Third-party image ${FLUENT_BIT_IMAGE} has HIGH/CRITICAL CVEs: ${TRIVY_FLUENT_BIT_CVES:-unavailable}"
-            [ -f /tmp/trivy-fluent-bit.json ] && jq -r "$JQ_CVE" /tmp/trivy-fluent-bit.json 2>/dev/null || true
+            if [ -f /tmp/trivy-fluent-bit.json ]; then
+              jq -r "$JQ_CVE" /tmp/trivy-fluent-bit.json 2>/dev/null || true
+            fi
           fi
           if [ "${failed}" -ne 0 ]; then
             echo "One or more Trivy scans failed."
@@ -412,9 +418,9 @@ jobs:
         run: |
           set -euo pipefail
           docker build -f alpaca-mcp.Dockerfile \
-            --build-arg BASE_PYTHON_IMAGE=${BASE_PYTHON_IMAGE} \
+            --build-arg BASE_PYTHON_IMAGE="${BASE_PYTHON_IMAGE}" \
             -t public.ecr.aws/e2u9m9o7/agent-provost:latest \
-            -t public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG} .
+            -t public.ecr.aws/e2u9m9o7/agent-provost:"${IMAGE_SHA_TAG}" .
       - name: Step 2 (Authenticate to AWS)
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -429,7 +435,7 @@ jobs:
         run: |
           set -euo pipefail
           docker push public.ecr.aws/e2u9m9o7/agent-provost:latest
-          docker push public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}
+          docker push public.ecr.aws/e2u9m9o7/agent-provost:"${IMAGE_SHA_TAG}"
       - name: Step 5 (Sanity/Integration Tests)
         run: |
           set -euo pipefail
