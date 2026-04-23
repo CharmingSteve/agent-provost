@@ -92,6 +92,42 @@ jobs:
       - name: Run bats tests
         run: bats tests/shell/
 
+  # ── GitHub Actions workflow linting ──────────────────────────────────────
+  lint-github-actions:
+    name: actionlint (GitHub Actions)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          ACTIONLINT_VERSION="1.7.12"
+          ACTIONLINT_TARBALL="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          ACTIONLINT_BASE_URL="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+          curl -fsSL -o "/tmp/${ACTIONLINT_TARBALL}" "${ACTIONLINT_BASE_URL}/${ACTIONLINT_TARBALL}"
+          tar -xzf "/tmp/${ACTIONLINT_TARBALL}" -C /tmp actionlint
+          sudo install -m 0755 /tmp/actionlint /usr/local/bin/actionlint
+      - name: Lint workflow files
+        run: |
+          set -euo pipefail
+          actionlint
+
+  # ── GitHub Actions workflow security linting ─────────────────────────────
+  security-zizmor:
+    name: zizmor (GitHub Actions security)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install zizmor
+        run: |
+          set -euo pipefail
+          python3 -m pip install --upgrade pip
+          python3 -m pip install zizmor==1.24.1
+      - name: Scan workflow files
+        run: |
+          set -euo pipefail
+          zizmor .github/workflows/
+
   # ── Log schema validation ──────────────────────────────────────────────────
   log-schema-validation:
     name: Log schema validation
@@ -244,16 +280,22 @@ jobs:
           if [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ]; then
             failed=1
             echo "::error title=Trivy scan failed::Image ${OPENRESTY_IMAGE} has HIGH/CRITICAL CVEs: ${TRIVY_OPENRESTY_CVES:-unavailable}"
-            [ -f /tmp/trivy-openresty.json ] && jq -r "$JQ_CVE" /tmp/trivy-openresty.json 2>/dev/null || true
+            if [ -f /tmp/trivy-openresty.json ]; then
+              jq -r "$JQ_CVE" /tmp/trivy-openresty.json 2>/dev/null || true
+            fi
           fi
           if [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
             failed=1
             echo "::error title=Trivy scan failed::Image agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG} has HIGH/CRITICAL CVEs: ${TRIVY_ALPACA_MCP_CVES:-unavailable}"
-            [ -f /tmp/trivy-alpaca-mcp.json ] && jq -r "$JQ_CVE" /tmp/trivy-alpaca-mcp.json 2>/dev/null || true
+            if [ -f /tmp/trivy-alpaca-mcp.json ]; then
+              jq -r "$JQ_CVE" /tmp/trivy-alpaca-mcp.json 2>/dev/null || true
+            fi
           fi
           if [ "${TRIVY_FLUENT_BIT_STATUS:-0}" -ne 0 ]; then
             echo "::warning title=Trivy advisory::Third-party image ${FLUENT_BIT_IMAGE} has HIGH/CRITICAL CVEs: ${TRIVY_FLUENT_BIT_CVES:-unavailable}"
-            [ -f /tmp/trivy-fluent-bit.json ] && jq -r "$JQ_CVE" /tmp/trivy-fluent-bit.json 2>/dev/null || true
+            if [ -f /tmp/trivy-fluent-bit.json ]; then
+              jq -r "$JQ_CVE" /tmp/trivy-fluent-bit.json 2>/dev/null || true
+            fi
           fi
           if [ "${failed}" -ne 0 ]; then
             echo "One or more Trivy scans failed."
@@ -359,7 +401,7 @@ jobs:
   build-secure-push-test:
     name: Build -> Secure -> Push -> Test (ECR Public)
     runs-on: ubuntu-24.04-arm
-    needs: [test-lua, test-shell, log-schema-validation, compose-smoke, security-trivy, security-python-audit]
+    needs: [test-lua, test-shell, lint-github-actions, security-zizmor, log-schema-validation, compose-smoke, security-trivy, security-python-audit]
     permissions:
       contents: read
       id-token: write
@@ -376,9 +418,9 @@ jobs:
         run: |
           set -euo pipefail
           docker build -f alpaca-mcp.Dockerfile \
-            --build-arg BASE_PYTHON_IMAGE=${BASE_PYTHON_IMAGE} \
+            --build-arg BASE_PYTHON_IMAGE="${BASE_PYTHON_IMAGE}" \
             -t public.ecr.aws/e2u9m9o7/agent-provost:latest \
-            -t public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG} .
+            -t public.ecr.aws/e2u9m9o7/agent-provost:"${IMAGE_SHA_TAG}" .
       - name: Step 2 (Authenticate to AWS)
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -393,7 +435,7 @@ jobs:
         run: |
           set -euo pipefail
           docker push public.ecr.aws/e2u9m9o7/agent-provost:latest
-          docker push public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}
+          docker push public.ecr.aws/e2u9m9o7/agent-provost:"${IMAGE_SHA_TAG}"
       - name: Step 5 (Sanity/Integration Tests)
         run: |
           set -euo pipefail

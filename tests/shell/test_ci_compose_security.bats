@@ -68,6 +68,47 @@
   [ "$status" -eq 0 ]
 }
 
+@test "CI includes blocking GitHub Actions lint via actionlint" {
+  run grep -E '^  lint-github-actions:' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'name: actionlint \(GitHub Actions\)' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'https://github.com/rhysd/actionlint/releases/download/' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^\s*actionlint$' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+}
+
+@test "CI includes blocking GitHub Actions security lint via zizmor" {
+  run grep -E '^  security-zizmor:' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'name: zizmor \(GitHub Actions security\)' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'python3 -m pip install zizmor==1\.24\.1' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^\s*zizmor \.github/workflows/$' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+}
+
+@test "zizmor baseline config is narrow and pins only accepted workflow findings" {
+  run grep -E '^rules:$' .github/zizmor.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^  dangerous-triggers:$' .github/zizmor.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^      - increment-version\.yml:3$' .github/zizmor.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^  unpinned-uses:$' .github/zizmor.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^      - ci\.yml$' .github/zizmor.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^      - increment-version\.yml$' .github/zizmor.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^  artipacked:$' .github/zizmor.yml
+  [ "$status" -eq 0 ]
+  count=$(grep -E '^      - ' .github/zizmor.yml | wc -l | tr -d ' ')
+  [ "$count" -eq 5 ]
+}
+
 @test "CI does not contain stale hardcoded openresty SHA" {
   run grep -F '4dcb9e26b5872609488cf3b6d47c330faec246978d54f8d2812b65431d789b50' .github/workflows/ci.yml
   [ "$status" -ne 0 ]
@@ -79,7 +120,7 @@
 }
 
 @test "build-secure-push-test depends on compose-smoke and security jobs" {
-  run grep -E 'needs: \[test-lua, test-shell, log-schema-validation, compose-smoke, security-trivy, security-python-audit\]' .github/workflows/ci.yml
+  run grep -E 'needs: \[test-lua, test-shell, lint-github-actions, security-zizmor, log-schema-validation, compose-smoke, security-trivy, security-python-audit\]' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 
@@ -141,5 +182,55 @@
   run grep -E '^\s*user:\s*"65532:65532"$' docker-compose.yml
   [ "$status" -eq 0 ]
   run grep -E '^\s*read_only:\s*true$' docker-compose.yml
+  [ "$status" -eq 0 ]
+}
+
+@test "increment-version workflow keeps same-repo guard and anti-recursion branch exclusion" {
+  run grep -E "github\.event\.pull_request\.head\.repo\.full_name == github\.repository" .github/workflows/increment-version.yml
+  [ "$status" -eq 0 ]
+  run grep -E "startsWith\(github\.event\.pull_request\.head\.ref, 'version-bump/'\)" .github/workflows/increment-version.yml
+  [ "$status" -eq 0 ]
+}
+
+@test "increment-version workflow keeps current PR-activity trigger model" {
+  run grep -E '^  pull_request_target:$' .github/workflows/increment-version.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^    types: \[opened, reopened, synchronize, ready_for_review\]$' .github/workflows/increment-version.yml
+  [ "$status" -eq 0 ]
+}
+
+@test "increment-version workflow keeps minimal write permission scope" {
+  run grep -E '^permissions:$' .github/workflows/increment-version.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^  contents: write$' .github/workflows/increment-version.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^[[:space:]]+(actions|pull-requests|packages|id-token): write$' .github/workflows/increment-version.yml
+  [ "$status" -ne 0 ]
+}
+
+@test "increment-version workflow does not execute checked-out repo scripts" {
+  run grep -E '(^|[[:space:]])(bash|sh|source)[[:space:]]+\./|(^|[[:space:]])\./[^[:space:]]+' .github/workflows/increment-version.yml
+  [ "$status" -ne 0 ]
+}
+
+@test "increment-version workflow keeps PR head ref usage bounded to current safe locations" {
+  count=$(grep -o 'github\.event\.pull_request\.head\.ref' .github/workflows/increment-version.yml | wc -l | tr -d ' ')
+  [ "$count" -eq 3 ]
+  run grep -E "!startsWith\(github\.event\.pull_request\.head\.ref, 'version-bump/'\)" .github/workflows/increment-version.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^\s*ref: \$\{\{ github\.event\.pull_request\.head\.ref \}\}$' .github/workflows/increment-version.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^\s*PR_HEAD_REF: \$\{\{ github\.event\.pull_request\.head\.ref \}\}$' .github/workflows/increment-version.yml
+  [ "$status" -eq 0 ]
+}
+
+@test "increment-version workflow remains limited to version.txt patch bump operations" {
+  run grep -E 'git show origin/main:version\.txt' .github/workflows/increment-version.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^\s*echo "\$new_version" > version\.txt$' .github/workflows/increment-version.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^\s*git add version\.txt$' .github/workflows/increment-version.yml
+  [ "$status" -eq 0 ]
+  run grep -E '^\s*git push origin "HEAD:\$\{PR_HEAD_REF\}"$' .github/workflows/increment-version.yml
   [ "$status" -eq 0 ]
 }
