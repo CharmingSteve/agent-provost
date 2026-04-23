@@ -21,6 +21,13 @@
       "window_seconds": 300
     }
   },
+    "symbol_order_cooldown": {
+      "enabled": true,
+      "description": "Block repeat orders for the same symbol within a rolling time window. Prevents an agent from rapidly re-ordering the same ticker regardless of order type or quantity.",
+      "params": {
+        "window_seconds": 300
+      }
+    },
   "blocked_tickers": {
     "enabled": true,
     "description": "Block trades on tickers that appear in the restricted symbol list. Prevents unauthorized exposure to specific securities.",

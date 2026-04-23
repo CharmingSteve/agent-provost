@@ -489,3 +489,107 @@ describe("rules_engine: cumulative_trade_notional rule", function()
     end)
 
 end)
+
+    -- ---------------------------------------------------------------------------
+    -- symbol_order_cooldown rule
+    -- ---------------------------------------------------------------------------
+    describe("rules_engine: symbol_order_cooldown rule", function()
+
+        local function make_store()
+            local data = {}
+            return {
+                add = function(_, key, value, _)
+                    if data[key] ~= nil then
+                        return nil, "exists"
+                    end
+                    data[key] = value
+                    return true
+                end,
+                get = function(_, key) return data[key] end,
+                set = function(_, key, value, _) data[key] = value; return true end
+            }
+        end
+
+        local rules_enabled = {
+            symbol_order_cooldown = { enabled = true, params = { window_seconds = 300 } }
+        }
+        local rules_disabled = {
+            symbol_order_cooldown = { enabled = false, params = { window_seconds = 300 } }
+        }
+
+        it("allows the first order for a symbol", function()
+            local ctx = { user = "u@x.com", machine = "m1", store = make_store() }
+            local blocked = engine.check_request(
+                make_parsed({ symbol = "WMT", qty = "99" }, "place_stock_order"),
+                rules_enabled, ctx)
+            assert.is_false(blocked)
+        end)
+
+        it("blocks a second order for the same symbol within the window", function()
+            local ctx = { user = "u@x.com", machine = "m1", store = make_store() }
+            engine.check_request(
+                make_parsed({ symbol = "WMT", qty = "99" }, "place_stock_order"),
+                rules_enabled, ctx)
+            local blocked, reason = engine.check_request(
+                make_parsed({ symbol = "WMT", qty = "99" }, "place_stock_order"),
+                rules_enabled, ctx)
+            assert.is_true(blocked)
+            assert.truthy(reason:find("PROVOST_INTERVENTION"))
+            assert.truthy(reason:find("WMT"))
+        end)
+
+        it("blocks market orders for the same symbol (no limit_price bypass)", function()
+            local ctx = { user = "u@x.com", machine = "m1", store = make_store() }
+            engine.check_request(
+                make_parsed({ symbol = "WMT", qty = "99", type = "market" }, "place_stock_order"),
+                rules_enabled, ctx)
+            local blocked, reason = engine.check_request(
+                make_parsed({ symbol = "WMT", qty = "99", type = "market" }, "place_stock_order"),
+                rules_enabled, ctx)
+            assert.is_true(blocked)
+            assert.truthy(reason:find("Cooldown"))
+        end)
+
+        it("allows a different symbol after the first is in cooldown", function()
+            local ctx = { user = "u@x.com", machine = "m1", store = make_store() }
+            engine.check_request(
+                make_parsed({ symbol = "WMT", qty = "99" }, "place_stock_order"),
+                rules_enabled, ctx)
+            local blocked = engine.check_request(
+                make_parsed({ symbol = "AAPL", qty = "50" }, "place_stock_order"),
+                rules_enabled, ctx)
+            assert.is_false(blocked)
+        end)
+
+        it("does not block when rule is disabled", function()
+            local ctx = { user = "u@x.com", machine = "m1", store = make_store() }
+            engine.check_request(
+                make_parsed({ symbol = "WMT", qty = "99" }, "place_stock_order"),
+                rules_enabled, ctx)
+            local blocked = engine.check_request(
+                make_parsed({ symbol = "WMT", qty = "99" }, "place_stock_order"),
+                rules_disabled, ctx)
+            assert.is_false(blocked)
+        end)
+
+        it("skips enforcement when context or store is absent (fail-open)", function()
+            local blocked = engine.check_request(
+                make_parsed({ symbol = "WMT", qty = "99" }, "place_stock_order"),
+                rules_enabled)
+            assert.is_false(blocked)
+        end)
+
+        it("tracks cooldown separately per user identity", function()
+            local shared_store = make_store()
+            local ctx_a = { user = "user-a@x.com", machine = "m1", store = shared_store }
+            local ctx_b = { user = "user-b@x.com", machine = "m1", store = shared_store }
+            engine.check_request(
+                make_parsed({ symbol = "WMT", qty = "99" }, "place_stock_order"),
+                rules_enabled, ctx_a)
+            local blocked = engine.check_request(
+                make_parsed({ symbol = "WMT", qty = "99" }, "place_stock_order"),
+                rules_enabled, ctx_b)
+            assert.is_false(blocked)
+        end)
+
+    end)
