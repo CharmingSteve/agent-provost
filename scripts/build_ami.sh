@@ -167,7 +167,7 @@ write_state
 
 # Ensure egress-only policy is explicit and idempotent.
 aws_cli ec2 revoke-security-group-egress --group-id "${SECURITY_GROUP_ID}" --ip-permissions '[{"IpProtocol":"-1","IpRanges":[{"CidrIp":"0.0.0.0/0"}]}]' >/dev/null 2>&1 || true
-aws_cli ec2 authorize-security-group-egress --group-id "${SECURITY_GROUP_ID}" --ip-permissions '[{"IpProtocol":"-1","IpRanges":[{"CidrIp":"0.0.0.0/0"}]}]'
+aws_cli ec2 authorize-security-group-egress --group-id "${SECURITY_GROUP_ID}" --ip-permissions '[{"IpProtocol":"-1","IpRanges":[{"CidrIp":"0.0.0.0/0"}]}]' >/dev/null 2>&1 || true
 
 UBUNTU_AMI_ID="$(aws_cli ssm get-parameter \
   --name '/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id' \
