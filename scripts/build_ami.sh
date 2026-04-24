@@ -152,8 +152,8 @@ if [[ -z "${VERSION:-}" ]]; then
   fi
 fi
 
-if [[ ! "${VERSION}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "VERSION must be semver-like (example: v1.2.3). Received: ${VERSION}" >&2
+if [[ ! "${VERSION}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+  echo "VERSION must be semver-like (examples: v1.2.3, v1.2.3-alpha.1). Received: ${VERSION}" >&2
   exit 1
 fi
 
