@@ -1,0 +1,86 @@
+name: Build Golden AMI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-ami:
+    name: Build AMI via AWS CLI + SSM
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: us-east-1
+      INSTANCE_PROFILE_NAME: ${{ vars.INSTANCE_PROFILE_NAME }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          set -xe
+          sudo apt-get update -y
+          sudo apt-get install -y shellcheck
+
+      - name: Lint AMI build script
+        run: |
+          set -xe
+          shellcheck scripts/build_ami.sh
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-1
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+
+      - name: Read version and timestamp
+        run: |
+          set -xe
+          VERSION="$(tr -d '\r\n' < version.txt)"
+          TIMESTAMP="$(date -u +%Y%m%d%H%M%S)"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "TIMESTAMP=${TIMESTAMP}" >> "$GITHUB_ENV"
+
+      - name: Build and bake AMI
+        env:
+          BUILD_STATE_FILE: ${{ runner.temp }}/ami-build-state.env
+        run: |
+          set -xe
+          chmod +x scripts/build_ami.sh
+          scripts/build_ami.sh
+
+      - name: Cleanup fallback (always)
+        if: always()
+        env:
+          BUILD_STATE_FILE: ${{ runner.temp }}/ami-build-state.env
+        run: |
+          set -xe
+          if [[ -f "${BUILD_STATE_FILE}" ]]; then
+            # shellcheck source=/dev/null
+            source "${BUILD_STATE_FILE}"
+          fi
+
+          if [[ -n "${INSTANCE_ID:-}" ]]; then
+            aws --region "${AWS_REGION}" --no-cli-pager --debug ec2 terminate-instances --instance-ids "${INSTANCE_ID}" || true
+            aws --region "${AWS_REGION}" --no-cli-pager --debug ec2 wait instance-terminated --instance-ids "${INSTANCE_ID}" || true
+          fi
+
+          if [[ -n "${SECURITY_GROUP_ID:-}" ]]; then
+            aws --region "${AWS_REGION}" --no-cli-pager --debug ec2 delete-security-group --group-id "${SECURITY_GROUP_ID}" || true
+          fi
+
+      - name: Summarize result
+        if: success()
+        env:
+          BUILD_STATE_FILE: ${{ runner.temp }}/ami-build-state.env
+        run: |
+          set -xe
+          if [[ -f "${BUILD_STATE_FILE}" ]]; then
+            # shellcheck source=/dev/null
+            source "${BUILD_STATE_FILE}"
+            echo "AMI_ID=${AMI_ID}" >> "$GITHUB_STEP_SUMMARY"
+          fi
