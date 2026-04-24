@@ -43,6 +43,25 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
+      - name: Resolve instance profile
+        run: |
+          set -xe
+          if [[ -z "${INSTANCE_PROFILE_NAME}" ]]; then
+            discovered_profile="$(aws iam list-instance-profiles --query 'InstanceProfiles[].InstanceProfileName' --output text | tr '\t' '\n' | grep -E 'ssm|SSM|ec2|EC2' | head -n 1 || true)"
+            if [[ -z "${discovered_profile}" ]]; then
+              discovered_profile="$(aws iam list-instance-profiles --query 'InstanceProfiles[0].InstanceProfileName' --output text)"
+            fi
+
+            if [[ -z "${discovered_profile}" || "${discovered_profile}" == "None" ]]; then
+              echo "No usable IAM instance profile found. Set repository variable INSTANCE_PROFILE_NAME or secret INSTANCE_PROFILE_NAME." >&2
+              exit 1
+            fi
+
+            echo "INSTANCE_PROFILE_NAME=${discovered_profile}" >> "$GITHUB_ENV"
+          else
+            echo "INSTANCE_PROFILE_NAME=${INSTANCE_PROFILE_NAME}" >> "$GITHUB_ENV"
+          fi
+
       - name: Read version and timestamp
         run: |
           set -xe
@@ -50,14 +69,6 @@ jobs:
           TIMESTAMP="$(date -u +%Y%m%d%H%M%S)"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "TIMESTAMP=${TIMESTAMP}" >> "$GITHUB_ENV"
-
-      - name: Validate required workflow inputs
-        run: |
-          set -xe
-          if [[ -z "${INSTANCE_PROFILE_NAME}" ]]; then
-            echo "Missing INSTANCE_PROFILE_NAME. Set repository variable INSTANCE_PROFILE_NAME or secret INSTANCE_PROFILE_NAME." >&2
-            exit 1
-          fi
 
       - name: Build and bake AMI
         env:
