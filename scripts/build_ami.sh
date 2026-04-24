@@ -101,14 +101,17 @@ wait_for_ssm_command() {
 
 run_ssm_script() {
   local script_content="$1"
+  local command_parameters=""
   local command_id=""
+
+  command_parameters="$(jq -cn --arg cmd "${script_content}" '{commands:[$cmd]}')"
 
   command_id="$({
     aws_cli ssm send-command \
       --instance-ids "${INSTANCE_ID}" \
       --document-name 'AWS-RunShellScript' \
       --comment 'agent-provost-ami-build' \
-      --parameters "commands=${script_content}" \
+      --parameters "${command_parameters}" \
       --query 'Command.CommandId' \
       --output text
   } || true)"
