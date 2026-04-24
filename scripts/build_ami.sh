@@ -128,11 +128,13 @@ cleanup() {
   write_state
 
   if [[ -n "${INSTANCE_ID}" ]]; then
+    # Idempotent cleanup: tolerate already-terminated instances.
     aws_cli ec2 terminate-instances --instance-ids "${INSTANCE_ID}" >/dev/null 2>&1 || true
     aws_cli ec2 wait instance-terminated --instance-ids "${INSTANCE_ID}" >/dev/null 2>&1 || true
   fi
 
   if [[ -n "${SECURITY_GROUP_ID}" ]]; then
+    # Idempotent cleanup: tolerate already-deleted security groups.
     aws_cli ec2 delete-security-group --group-id "${SECURITY_GROUP_ID}" >/dev/null 2>&1 || true
   fi
 
