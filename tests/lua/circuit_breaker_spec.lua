@@ -1,6 +1,6 @@
 -- circuit_breaker_spec.lua
 -- Unit tests for the circuit-breaker logic embedded in default.conf
--- (access_by_lua_block on port-8000 / HOP-1).
+-- (access_by_lua_block on port-8000 / llm-to-mcp boundary).
 --
 -- The pure decision function mirrors the Lua block exactly so that we can
 -- validate every branch without a running nginx instance.
