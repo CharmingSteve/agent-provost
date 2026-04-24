@@ -157,33 +157,9 @@ if [[ ! "${VERSION}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?(\+[0-9A-Z
   exit 1
 fi
 
-DEFAULT_VPC_ID="$(aws_cli ec2 describe-vpcs --filters 'Name=is-default,Values=true' --query 'Vpcs[0].VpcId' --output text)"
-if [[ -z "${DEFAULT_VPC_ID}" || "${DEFAULT_VPC_ID}" == "None" ]]; then
-  echo "No default VPC found in ${AWS_REGION}" >&2
-  exit 1
-fi
-
-DEFAULT_SUBNET_ID="$(aws_cli ec2 describe-subnets \
-  --filters "Name=vpc-id,Values=${DEFAULT_VPC_ID}" "Name=map-public-ip-on-launch,Values=true" \
-  --query 'Subnets[0].SubnetId' \
-  --output text)"
-
-if [[ -z "${DEFAULT_SUBNET_ID}" || "${DEFAULT_SUBNET_ID}" == "None" ]]; then
-  DEFAULT_SUBNET_ID="$(aws_cli ec2 describe-subnets \
-    --filters "Name=vpc-id,Values=${DEFAULT_VPC_ID}" \
-    --query 'Subnets[0].SubnetId' \
-    --output text)"
-fi
-
-if [[ -z "${DEFAULT_SUBNET_ID}" || "${DEFAULT_SUBNET_ID}" == "None" ]]; then
-  echo "No subnet found in default VPC ${DEFAULT_VPC_ID}" >&2
-  exit 1
-fi
-
 SECURITY_GROUP_ID="$(aws_cli ec2 create-security-group \
   --group-name "agent-provost-ami-${TIMESTAMP}" \
   --description 'Temporary SG for agent-provost AMI build (egress-only)' \
-  --vpc-id "${DEFAULT_VPC_ID}" \
   --query 'GroupId' \
   --output text)"
 
@@ -203,8 +179,9 @@ INSTANCE_ID="$(aws_cli ec2 run-instances \
   --instance-type 't4g.micro' \
   --key-name 'Dassie-NV-4' \
   --iam-instance-profile "Name=${INSTANCE_PROFILE_NAME}" \
+  --associate-public-ip-address \
+  --security-group-ids "${SECURITY_GROUP_ID}" \
   --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":16,"VolumeType":"gp3","DeleteOnTermination":true}}]' \
-  --network-interfaces "[{\"DeviceIndex\":0,\"SubnetId\":\"${DEFAULT_SUBNET_ID}\",\"Groups\":[\"${SECURITY_GROUP_ID}\"],\"AssociatePublicIpAddress\":true,\"DeleteOnTermination\":true}]" \
   --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=agent-provost-ami-builder},{Key=Project,Value=agent-provost}]" \
   --query 'Instances[0].InstanceId' \
   --output text)"
