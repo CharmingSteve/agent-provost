@@ -41,10 +41,10 @@ docker exec agent-provost cat /run/secrets/provost_token
 
 ## 🏗️ Architecture: The Two-Hop Flow
 
-To guarantee full traceability, Agent Provost monitors two distinct hops:
+To guarantee full traceability, Agent Provost monitors two distinct boundaries:
 
-1.  **Hop 1 (Inbound):** `LLM Client` -> `Agent Provost (Port 8000)` -> `MCP Server`
-2.  **Hop 2 (Outbound):** `MCP Server` -> `Agent Provost (Port 8081)` -> `Alpaca APIs`
+1.  **llm-to-mcp (Inbound):** `LLM Client` -> `Agent Provost (Port 8000)` -> `MCP Server`
+2.  **mcp-to-api (Outbound):** `MCP Server` -> `Agent Provost (Port 8081)` -> `Alpaca APIs`
 
 This "Double-Proxy" setup ensures that even if the MCP server is compromised or contains bugs, the outbound calls to Wall Street are still captured and governed by your proxy rules.
 
@@ -69,8 +69,14 @@ If you want full traceability, these four events should be visible across the tw
 
 How they map in the Fluent Bit pipeline (`stream_tag`):
 
-- `provost_hop1_access`: step 1 (LLM -> MCP) and step 4 (MCP -> LLM)
-- `provost_hop2_access`: step 2 (MCP -> Alpaca) and step 3 (Alpaca -> MCP)
+- `provost_llm_to_mcp_access`: step 1 (LLM -> MCP) and step 4 (MCP -> LLM)
+- `provost_mcp_to_api_access`: step 2 (MCP -> Alpaca) and step 3 (Alpaca -> MCP)
+
+Error stream tags:
+
+- `provost_mcp_to_llm_error`: request-path errors on the llm-to-mcp boundary
+- `provost_api_to_mcp_error`: request-path errors on the mcp-to-api boundary
+- `provost_nginx_error`: OpenResty worker/runtime errors (not request-scoped)
 
 For normal authenticated trading traffic, both access logs should carry the same identity fields:
 
@@ -149,11 +155,12 @@ Each OpenResty access log entry (from `json_full`) captures:
 - `resp_body` (The actual JSON returned by the API)
 
 Fluent Bit then parses/enriches and writes records to S3, including:
-- `stream_tag` (`provost_hop1_access`, `provost_hop2_access`, and error tags)
+- `stream_tag` (`provost_llm_to_mcp_access`, `provost_mcp_to_api_access`, and error tags)
+- `log_type` (`access` or `error`)
 - `Region`
 - `Instance_ID`
 
-`provost_request_id` is created on Hop 1 when the inbound request is validated. If the client already supplied `X-Provost-Request-Id`, the proxy reuses it; otherwise Hop 1 generates one from `request_id` or a timestamp-random fallback, stores the identity context in shared memory, and forwards the same id downstream so Hop 2 can recover and log the same correlation id.
+`provost_request_id` is created on the llm-to-mcp boundary when the inbound request is validated. If the client already supplied `X-Provost-Request-Id`, the proxy reuses it; otherwise it generates one from `request_id` or a timestamp-random fallback, stores the identity context in shared memory, and forwards the same id downstream so the mcp-to-api boundary can recover and log the same correlation id.
 
 ---
 
@@ -209,7 +216,7 @@ For Fluent Bit audit streaming in local dev, configure these `.env` keys:
 
 Point your MCP clients to: `http://localhost:8088/mcp`
 
-Required client headers for Hop 1 auth:
+Required client headers for llm-to-mcp auth:
 
 - `X-Provost-Token` (must match `/run/secrets/provost_token`)
 - `X-Provost-User` (human identity; for example `your.email@domain.com`)

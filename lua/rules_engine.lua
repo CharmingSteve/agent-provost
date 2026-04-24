@@ -297,6 +297,46 @@ function _M.check_request(parsed, rules, context)
         end
     end
     -- ----------------------------------------------------------------
+    -- Rule: symbol_order_cooldown
+    -- Blocks repeat orders for the same symbol within a time window.
+    -- Enforced regardless of order type or quantity — any second order
+    -- for a symbol that already has an active cooldown entry is blocked.
+    -- ----------------------------------------------------------------
+    local cooldown_rule = rules.symbol_order_cooldown
+    if type(cooldown_rule) == "table" and cooldown_rule.enabled == true then
+        local window_seconds = 300
+        if type(cooldown_rule.params) == "table" then
+            window_seconds = tonumber(cooldown_rule.params.window_seconds) or window_seconds
+        end
+
+        if window_seconds > 0 then
+            local ticker = normalize_ticker(args)
+            if ticker ~= "" then
+                local user    = type(context) == "table" and context.user    or nil
+                local machine = type(context) == "table" and context.machine or nil
+                local store   = type(context) == "table" and context.store   or nil
+
+                if type(store) == "table"
+                   and type(user) == "string" and user ~= ""
+                   and type(machine) == "string" and machine ~= "" then
+                    local cooldown_key = "symbol_cooldown:" .. user .. ":" .. machine .. ":" .. ticker
+                    local add_ok, add_err = store:add(cooldown_key, 1, window_seconds)
+                    if not add_ok and add_err == "exists" then
+                        return true,
+                            "PROVOST_INTERVENTION: Symbol Cooldown Active. " ..
+                            "Symbol '" .. ticker .. "' was already ordered within the active " ..
+                            window_seconds .. "s window. Wait before reordering."
+                    elseif not add_ok then
+                        return true,
+                            "PROVOST_INTERVENTION: Risk State Unavailable. " ..
+                            "Blocked to avoid untracked symbol cooldown."
+                    end
+                end
+            end
+        end
+    end
+
+    -- ----------------------------------------------------------------
     -- Rule: blocked_tool_names
     -- Blocks requests whose tool name is explicitly restricted.
     -- ----------------------------------------------------------------

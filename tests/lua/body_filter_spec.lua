@@ -1,6 +1,6 @@
 -- body_filter_spec.lua
 -- Unit tests for the response-body buffering logic used in default.conf
--- (body_filter_by_lua_block on both HOP-1 and HOP-2).
+-- (body_filter_by_lua_block on both llm-to-mcp and mcp-to-api boundaries).
 --
 -- The pure buffer function mirrors the Lua block so we can exercise every
 -- branch without a running nginx instance.
