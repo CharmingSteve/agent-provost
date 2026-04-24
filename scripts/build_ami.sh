@@ -73,9 +73,17 @@ wait_for_ssm_command() {
 
     case "${status}" in
       Success)
+        echo "--- SSM Command Output ---"
+        aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" --query "StandardOutputContent" --output text || true
+        echo "--- SSM Command Error ---"
+        aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" --query "StandardErrorContent" --output text || true
         return 0
         ;;
       Failed|Cancelled|Cancelling|TimedOut)
+        echo "--- SSM Command Output ---"
+        aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" --query "StandardOutputContent" --output text || true
+        echo "--- SSM Command Error ---"
+        aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" --query "StandardErrorContent" --output text || true
         aws_cli ssm get-command-invocation \
           --command-id "${command_id}" \
           --instance-id "${INSTANCE_ID}" \
