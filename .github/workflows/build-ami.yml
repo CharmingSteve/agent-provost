@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AWS_REGION: us-east-1
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       INSTANCE_PROFILE_NAME: ${{ vars.INSTANCE_PROFILE_NAME != '' && vars.INSTANCE_PROFILE_NAME || secrets.INSTANCE_PROFILE_NAME }}
     steps:
       - name: Checkout

@@ -204,18 +204,27 @@ run_ssm_script "#!/usr/bin/env bash
 set -xe
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y awscli jq docker.io docker-compose-v2 git ca-certificates curl
+apt-get install -y jq docker.io git ca-certificates curl
+apt-get install -y docker-compose-plugin || apt-get install -y docker-compose
 systemctl enable --now docker
 if [ -d /opt/agent-provost ]; then rm -rf /opt/agent-provost; fi
 git clone --depth 1 https://github.com/CharmingSteve/agent-provost /opt/agent-provost
 cd /opt/agent-provost
-docker compose --env-file .env.versions pull"
+if docker compose version >/dev/null 2>&1; then
+  docker compose --env-file .env.versions pull
+else
+  docker-compose --env-file .env.versions pull
+fi"
 
 run_ssm_script "#!/usr/bin/env bash
 set -xe
 systemctl is-active docker
 docker --version
-docker compose version
+if docker compose version >/dev/null 2>&1; then
+  docker compose version
+else
+  docker-compose --version
+fi
 docker images --format '{{.Repository}}:{{.Tag}}'
 test -f /opt/agent-provost/docker-compose.yml"
 
