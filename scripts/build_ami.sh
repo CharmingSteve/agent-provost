@@ -102,12 +102,12 @@ wait_for_ssm_command() {
 run_ssm_script() {
   local script_content="$1"
   local script_file=""
-  local command_parameters=""
+  local CMD_JSON=""
   local command_id=""
 
-  script_file="$(mktemp)"
+  script_file="$(mktemp /tmp/ssm-script-XXXXXX.sh)"
   printf '%s\n' "${script_content}" >"${script_file}"
-  command_parameters="$(jq -n --arg script "$(cat "${script_file}")" '{commands:[$script]}')"
+  CMD_JSON="$(jq -n --arg script "$(cat "${script_file}")" '{"commands": [$script]}')"
   rm -f "${script_file}"
 
   command_id="$({
@@ -115,7 +115,7 @@ run_ssm_script() {
       --instance-ids "${INSTANCE_ID}" \
       --document-name 'AWS-RunShellScript' \
       --comment 'agent-provost-ami-build' \
-      --parameters "${command_parameters}" \
+      --parameters "${CMD_JSON}" \
       --query 'Command.CommandId' \
       --output text
   } || true)"
