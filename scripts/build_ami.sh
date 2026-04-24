@@ -243,11 +243,16 @@ truncate -s 0 /etc/machine-id || true
 rm -f /var/lib/dbus/machine-id || true
 rm -rf /var/lib/cloud/instances/* /var/lib/cloud/data/* || true"
 
-aws_cli ec2 stop-instances --instance-ids "${INSTANCE_ID}" >/dev/null
-aws_cli ec2 wait instance-stopped --instance-ids "${INSTANCE_ID}"
+create_image_mode=()
+if aws_cli ec2 stop-instances --instance-ids "${INSTANCE_ID}" >/dev/null 2>&1; then
+  aws_cli ec2 wait instance-stopped --instance-ids "${INSTANCE_ID}"
+else
+  echo "Warning: unable to stop instance; falling back to create-image --no-reboot" >&2
+  create_image_mode=(--no-reboot)
+fi
 
 AMI_NAME="agent-provost-v${VERSION#v}-${TIMESTAMP}"
-AMI_ID="$(aws_cli ec2 create-image --instance-id "${INSTANCE_ID}" --name "${AMI_NAME}" --description "Agent Provost Golden AMI ${VERSION} ${TIMESTAMP}" --query 'ImageId' --output text)"
+AMI_ID="$(aws_cli ec2 create-image --instance-id "${INSTANCE_ID}" "${create_image_mode[@]}" --name "${AMI_NAME}" --description "Agent Provost Golden AMI ${VERSION} ${TIMESTAMP}" --query 'ImageId' --output text)"
 write_state
 aws_cli ec2 wait image-available --image-ids "${AMI_ID}"
 
