@@ -123,6 +123,7 @@ run_ssm_script() {
       --instance-ids "${INSTANCE_ID}" \
       --document-name 'AWS-RunShellScript' \
       --comment 'agent-provost-ami-build' \
+      --timeout-seconds 3600 \
       --parameters "${CMD_JSON}" \
       --query 'Command.CommandId' \
       --output text
@@ -213,7 +214,10 @@ set -xe
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y jq docker.io docker-compose-v2 git ca-certificates curl
-systemctl enable --now docker
+systemctl enable --now docker"
+
+run_ssm_script "#!/usr/bin/env bash
+set -xe
 if [ -d /opt/agent-provost ]; then rm -rf /opt/agent-provost; fi
 git clone --depth 1 https://github.com/CharmingSteve/agent-provost /opt/agent-provost
 cd /opt/agent-provost
