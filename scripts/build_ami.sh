@@ -212,27 +212,18 @@ run_ssm_script "#!/usr/bin/env bash
 set -xe
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y jq docker.io git ca-certificates curl
-apt-get install -y docker-compose-plugin || apt-get install -y docker-compose
+apt-get install -y jq docker.io docker-compose-v2 git ca-certificates curl
 systemctl enable --now docker
 if [ -d /opt/agent-provost ]; then rm -rf /opt/agent-provost; fi
 git clone --depth 1 https://github.com/CharmingSteve/agent-provost /opt/agent-provost
 cd /opt/agent-provost
-if docker compose version >/dev/null 2>&1; then
-  docker compose --env-file .env.versions pull
-else
-  docker-compose --env-file .env.versions pull
-fi"
+docker compose --env-file .env.versions pull"
 
 run_ssm_script "#!/usr/bin/env bash
 set -xe
 systemctl is-active docker
 docker --version
-if docker compose version >/dev/null 2>&1; then
-  docker compose version
-else
-  docker-compose --version
-fi
+docker compose version
 docker images --format '{{.Repository}}:{{.Tag}}'
 test -f /opt/agent-provost/docker-compose.yml"
 
@@ -249,7 +240,10 @@ git config --global --unset-all credential.helper || true
 rm -f /etc/ssh/ssh_host_*
 truncate -s 0 /etc/machine-id || true
 rm -f /var/lib/dbus/machine-id || true
-rm -rf /var/lib/cloud/instances/* /var/lib/cloud/data/* || true"
+rm -rf /var/lib/cloud/instances/* /var/lib/cloud/data/* || true
+systemctl stop amazon-ssm-agent || true
+rm -rf /var/lib/amazon/ssm/*
+rm -rf /var/log/amazon/ssm/*"
 
 create_image_mode=()
 if aws_cli ec2 stop-instances --instance-ids "${INSTANCE_ID}" >/dev/null 2>&1; then
