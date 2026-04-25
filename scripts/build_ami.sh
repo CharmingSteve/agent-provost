@@ -260,7 +260,7 @@ rm -f /etc/ssh/ssh_host_*
 truncate -s 0 /etc/machine-id || true
 rm -f /var/lib/dbus/machine-id || true
 rm -rf /var/lib/cloud/instances/* /var/lib/cloud/data/* || true
-nohup bash -c 'sleep 5; systemctl stop amazon-ssm-agent || true; rm -rf /var/lib/amazon/ssm/*; rm -rf /var/log/amazon/ssm/*' >/dev/null 2>&1 &"
+nohup bash -c 'sleep 5; snap stop amazon-ssm-agent || true; rm -rf /var/snap/amazon-ssm-agent/common/state/*; rm -rf /var/snap/amazon-ssm-agent/common/logs/*' >/dev/null 2>&1 &"
 
 # Give delayed SSM-agent teardown time to complete before stopping/imaging the instance.
 sleep 15
