@@ -111,11 +111,15 @@ run_ssm_script() {
   local script_content="$1"
   local script_file=""
   local CMD_JSON=""
+  local execution_timeout_seconds="7200"
   local command_id=""
 
   script_file="$(mktemp /tmp/ssm-script-XXXXXX.sh)"
   printf '%s\n' "${script_content}" >"${script_file}"
-  CMD_JSON="$(jq -n --arg script "$(cat "${script_file}")" '{"commands": [$script]}')"
+  CMD_JSON="$(jq -n \
+    --arg script "$(cat "${script_file}")" \
+    --arg timeout "${execution_timeout_seconds}" \
+    '{"commands": [$script], "executionTimeout": [$timeout]}')"
   rm -f "${script_file}"
 
   command_id="$({
