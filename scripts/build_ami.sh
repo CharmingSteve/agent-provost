@@ -260,9 +260,10 @@ rm -f /etc/ssh/ssh_host_*
 truncate -s 0 /etc/machine-id || true
 rm -f /var/lib/dbus/machine-id || true
 rm -rf /var/lib/cloud/instances/* /var/lib/cloud/data/* || true
-systemctl stop amazon-ssm-agent || true
-rm -rf /var/lib/amazon/ssm/*
-rm -rf /var/log/amazon/ssm/*"
+nohup bash -c 'sleep 5; systemctl stop amazon-ssm-agent || true; rm -rf /var/lib/amazon/ssm/*; rm -rf /var/log/amazon/ssm/*' >/dev/null 2>&1 &"
+
+# Give delayed SSM-agent teardown time to complete before stopping/imaging the instance.
+sleep 15
 
 create_image_mode=()
 if aws_cli ec2 stop-instances --instance-ids "${INSTANCE_ID}" >/dev/null 2>&1; then
