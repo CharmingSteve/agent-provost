@@ -194,7 +194,7 @@ UBUNTU_AMI_ID="$(aws_cli ssm get-parameter \
 
 INSTANCE_ID="$(aws_cli ec2 run-instances \
   --image-id "${UBUNTU_AMI_ID}" \
-  --instance-type 't4g.micro' \
+  --instance-type 't4g.small' \
   --key-name 'Dassie-NV-4' \
   --iam-instance-profile "Name=${INSTANCE_PROFILE_NAME}" \
   --associate-public-ip-address \
@@ -208,6 +208,17 @@ write_state
 
 aws_cli ec2 wait instance-running --instance-ids "${INSTANCE_ID}"
 wait_for_ssm_online
+
+
+# Create 2 GiB swap so apt-get/docker-pull never starve the SSM agent on low-memory instances.
+run_ssm_script "#!/usr/bin/env bash
+set -xe
+if [ ! -f /swapfile ]; then
+  fallocate -l 2G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+fi"
 
 run_ssm_script "#!/usr/bin/env bash
 set -xe
