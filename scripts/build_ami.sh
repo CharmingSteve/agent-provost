@@ -288,6 +288,7 @@ printf '%s' "${SECRET_NAME}" >/run/secrets/aws_secret_id
 printf '%s' "${S3_BUCKET}" >/run/secrets/s3_bucket
 printf '%s' "${REGION}" >/run/secrets/aws_region
 chmod 600 /run/secrets/aws_secret_id /run/secrets/s3_bucket /run/secrets/aws_region
+chown provost:provost /run/secrets /run/secrets/aws_secret_id /run/secrets/s3_bucket /run/secrets/aws_region
 
 export PROVOST_SECRET_NAME="${SECRET_NAME}"
 export AWS_REGION="${REGION}"
