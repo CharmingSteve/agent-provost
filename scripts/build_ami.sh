@@ -293,17 +293,24 @@ chown provost:provost /run/secrets /run/secrets/aws_secret_id /run/secrets/s3_bu
 export PROVOST_SECRET_NAME="${SECRET_NAME}"
 export AWS_REGION="${REGION}"
 export S3_BUCKET="${S3_BUCKET}"
+export ALLOW_EC2_LOCAL_FALLBACK_SECRETS="false"
 
 cd /opt/agent-provost
 sudo -u provost docker compose --env-file .env.versions down || true
 bootstrap_exports="$(sh bootstrap.sh ec2)"
 eval "${bootstrap_exports}"
-chown -R provost:provost /opt/agent-provost/.secrets
+# Keep only tmpfs-backed secrets for runtime mounts.
+cp /run/provost-secrets/alpaca_api_key /run/secrets/alpaca_api_key
+cp /run/provost-secrets/alpaca_secret_key /run/secrets/alpaca_secret_key
+cp /run/provost-secrets/alpaca_paper_trade /run/secrets/alpaca_paper_trade
+cp /run/provost-secrets/provost_token /run/secrets/provost_token
+chmod 600 /run/secrets/alpaca_api_key /run/secrets/alpaca_secret_key /run/secrets/alpaca_paper_trade /run/secrets/provost_token
+chown provost:provost /run/secrets/alpaca_api_key /run/secrets/alpaca_secret_key /run/secrets/alpaca_paper_trade /run/secrets/provost_token
 mkdir -p /opt/agent-provost/logs/fluent-bit-storage
 chown -R 65532:65532 /opt/agent-provost/logs/fluent-bit-storage
-export PROVOST_SECRETS_DIR="/opt/agent-provost/.secrets"
-export ALPACA_API_KEY="$(cat /opt/agent-provost/.secrets/alpaca_api_key)"
-export ALPACA_SECRET_KEY="$(cat /opt/agent-provost/.secrets/alpaca_secret_key)"
+export PROVOST_SECRETS_DIR="/run/secrets"
+export ALPACA_API_KEY="$(cat /run/secrets/alpaca_api_key)"
+export ALPACA_SECRET_KEY="$(cat /run/secrets/alpaca_secret_key)"
 sudo -E -u provost docker compose --env-file .env.versions up -d
 BOOTWRAP
 
