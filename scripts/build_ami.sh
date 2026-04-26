@@ -238,7 +238,8 @@ git clone --depth 1 https://github.com/CharmingSteve/agent-provost /opt/agent-pr
 cd /opt/agent-provost
 docker compose --env-file .env.versions pull"
 
-run_ssm_script "#!/usr/bin/env bash
+run_ssm_script "$(cat <<'SSM_SCRIPT'
+#!/usr/bin/env bash
 set -xe
 
 if ! id -u provost >/dev/null 2>&1; then
@@ -253,9 +254,9 @@ cat >/var/lib/cloud/scripts/per-boot/01-agent-provost-boot.sh <<'BOOTWRAP'
 #!/usr/bin/env bash
 set -euo pipefail
 
-TOKEN="$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")"
-INSTANCE_ID="$(curl -fsS -H "X-aws-ec2-metadata-token: ${TOKEN}" "http://169.254.169.254/latest/meta-data/instance-id")"
-IDENTITY_DOC="$(curl -fsS -H "X-aws-ec2-metadata-token: ${TOKEN}" "http://169.254.169.254/latest/dynamic/instance-identity/document")"
+TOKEN="$(curl -fsS -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600')"
+INSTANCE_ID="$(curl -fsS -H "X-aws-ec2-metadata-token: ${TOKEN}" http://169.254.169.254/latest/meta-data/instance-id)"
+IDENTITY_DOC="$(curl -fsS -H "X-aws-ec2-metadata-token: ${TOKEN}" http://169.254.169.254/latest/dynamic/instance-identity/document)"
 REGION="$(printf '%s' "${IDENTITY_DOC}" | jq -r '.region')"
 ACCOUNT_ID="$(printf '%s' "${IDENTITY_DOC}" | jq -r '.accountId')"
 
@@ -289,12 +290,15 @@ export S3_BUCKET="${S3_BUCKET}"
 
 cd /opt/agent-provost
 sudo -u provost docker compose --env-file .env.versions down || true
-eval "$(sh bootstrap.sh ec2)"
+bootstrap_exports="$(sh bootstrap.sh ec2)"
+eval "${bootstrap_exports}"
 chown -R provost:provost /opt/agent-provost/.secrets
 sudo -E -u provost docker compose --env-file .env.versions up -d
 BOOTWRAP
 
-chmod 755 /var/lib/cloud/scripts/per-boot/01-agent-provost-boot.sh"
+chmod 755 /var/lib/cloud/scripts/per-boot/01-agent-provost-boot.sh
+SSM_SCRIPT
+)"
 
 run_ssm_script "#!/usr/bin/env bash
 set -xe
