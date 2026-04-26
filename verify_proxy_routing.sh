@@ -155,8 +155,8 @@ def call(sess, rid, method, params=None):
         "Accept": "application/json, text/event-stream",
         "Content-Type": "application/json",
         "X-Provost-Token": provost_token,
-        "X-Provost-User": os.environ.get("PROVOST_VERIFY_USER", "verify@local"),
-        "X-Provost-Machine": os.environ.get("PROVOST_VERIFY_MACHINE", "verify-runner"),
+        "X-Provost-User": os.environ.get("PROVOST_VERIFY_USER", "verify_proxy_script@local"),
+        "X-Provost-Machine": os.environ.get("PROVOST_VERIFY_MACHINE", "verify-proxy-script-runner"),
         "X-Provost-Request-Id": request_id,
     }
     if sid:
