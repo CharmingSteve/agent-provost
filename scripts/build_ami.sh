@@ -304,8 +304,10 @@ cp /run/provost-secrets/alpaca_api_key /run/secrets/alpaca_api_key
 cp /run/provost-secrets/alpaca_secret_key /run/secrets/alpaca_secret_key
 cp /run/provost-secrets/alpaca_paper_trade /run/secrets/alpaca_paper_trade
 cp /run/provost-secrets/provost_token /run/secrets/provost_token
-chmod 600 /run/secrets/alpaca_api_key /run/secrets/alpaca_secret_key /run/secrets/alpaca_paper_trade /run/secrets/provost_token
-chown provost:provost /run/secrets/alpaca_api_key /run/secrets/alpaca_secret_key /run/secrets/alpaca_paper_trade /run/secrets/provost_token
+# Ensure mounted secret files are readable by non-root container UIDs.
+chmod 444 /run/secrets/alpaca_api_key /run/secrets/alpaca_secret_key /run/secrets/alpaca_paper_trade /run/secrets/provost_token
+chown root:root /run/secrets/alpaca_api_key /run/secrets/alpaca_secret_key /run/secrets/alpaca_paper_trade /run/secrets/provost_token
+rm -rf /opt/agent-provost/.secrets
 mkdir -p /opt/agent-provost/logs/fluent-bit-storage
 chown -R 65532:65532 /opt/agent-provost/logs/fluent-bit-storage
 export PROVOST_SECRETS_DIR="/run/secrets"
