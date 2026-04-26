@@ -240,6 +240,64 @@ docker compose --env-file .env.versions pull"
 
 run_ssm_script "#!/usr/bin/env bash
 set -xe
+
+if ! id -u provost >/dev/null 2>&1; then
+  useradd -m -s /bin/bash provost
+fi
+
+usermod -aG docker provost
+chown -R provost:provost /opt/agent-provost
+
+install -d -m 755 /var/lib/cloud/scripts/per-boot
+cat >/var/lib/cloud/scripts/per-boot/01-agent-provost-boot.sh <<'BOOTWRAP'
+#!/usr/bin/env bash
+set -euo pipefail
+
+TOKEN="$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")"
+INSTANCE_ID="$(curl -fsS -H "X-aws-ec2-metadata-token: ${TOKEN}" "http://169.254.169.254/latest/meta-data/instance-id")"
+IDENTITY_DOC="$(curl -fsS -H "X-aws-ec2-metadata-token: ${TOKEN}" "http://169.254.169.254/latest/dynamic/instance-identity/document")"
+REGION="$(printf '%s' "${IDENTITY_DOC}" | jq -r '.region')"
+ACCOUNT_ID="$(printf '%s' "${IDENTITY_DOC}" | jq -r '.accountId')"
+
+STACK_NAME="$(aws ec2 describe-tags \
+  --region "${REGION}" \
+  --filters "Name=resource-id,Values=${INSTANCE_ID}" "Name=key,Values=aws:cloudformation:stack-name" \
+  --query 'Tags[0].Value' \
+  --output text)"
+
+if [ -z "${STACK_NAME}" ] || [ "${STACK_NAME}" = "None" ]; then
+  echo "Unable to determine CloudFormation stack name from instance tags" >&2
+  exit 1
+fi
+
+SECRET_NAME="agent-provost-secret-${STACK_NAME}"
+S3_BUCKET="agent-provost-logs-${ACCOUNT_ID}-${REGION}-${STACK_NAME}"
+
+install -d -m 755 /run/secrets
+if ! mountpoint -q /run/secrets; then
+  mount -t tmpfs -o size=1M,mode=755 tmpfs /run/secrets
+fi
+
+printf '%s' "${SECRET_NAME}" >/run/secrets/aws_secret_id
+printf '%s' "${S3_BUCKET}" >/run/secrets/s3_bucket
+printf '%s' "${REGION}" >/run/secrets/aws_region
+chmod 600 /run/secrets/aws_secret_id /run/secrets/s3_bucket /run/secrets/aws_region
+
+export PROVOST_SECRET_NAME="${SECRET_NAME}"
+export AWS_REGION="${REGION}"
+export S3_BUCKET="${S3_BUCKET}"
+
+cd /opt/agent-provost
+sudo -u provost docker compose --env-file .env.versions down || true
+eval "$(sh bootstrap.sh ec2)"
+chown -R provost:provost /opt/agent-provost/.secrets
+sudo -E -u provost docker compose --env-file .env.versions up -d
+BOOTWRAP
+
+chmod 755 /var/lib/cloud/scripts/per-boot/01-agent-provost-boot.sh"
+
+run_ssm_script "#!/usr/bin/env bash
+set -xe
 systemctl is-active docker
 docker --version
 docker compose version

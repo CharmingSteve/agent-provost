@@ -161,7 +161,7 @@ Resources:
   AgentProvostSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: !Sub "agent-provost/${AWS::StackName}"
+      Name: !Sub "agent-provost-secret-${AWS::StackName}"
       Description: "Agent Provost runtime secrets (Alpaca keys + Provost token)"
       SecretString: !Sub |
         {"ALPACA_API_KEY":"${AlpacaApiKey}","ALPACA_SECRET_KEY":"${AlpacaSecretKey}","ALPACA_PAPER_TRADE":"${AlpacaPaperTrade}","PROVOST_TOKEN":"${ProvostToken}","S3_BUCKET":"${LogsBucket}","AWS_REGION":"${AWS::Region}"}
@@ -229,6 +229,10 @@ Resources:
                 Effect: Allow
                 Action: s3:PutObject
                 Resource: !Sub "${LogsBucket.Arn}/*"
+              - Sid: ReadOwnTags
+                Effect: Allow
+                Action: ec2:DescribeTags
+                Resource: "*"
       Tags:
         - Key: Project
           Value: agent-provost
@@ -287,12 +291,7 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash
           set -e
-          export PROVOST_SECRET_NAME='${AgentProvostSecret}'
-          export S3_BUCKET='${LogsBucket}'
-          export AWS_REGION='${AWS::Region}'
-          cd /opt/agent-provost
-          eval "$(/opt/agent-provost/bootstrap.sh ec2)"
-          docker compose up -d
+          # Runtime boot orchestration is baked into the AMI per-boot script.
       Tags:
         - Key: Name
           Value: !Sub "agent-provost-${AWS::StackName}"
