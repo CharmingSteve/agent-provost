@@ -228,7 +228,12 @@ run_ssm_script "#!/usr/bin/env bash
 set -xe
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y jq docker.io docker-compose-v2 git ca-certificates curl awscli
+apt-get install -y jq docker.io docker-compose-v2 git ca-certificates curl unzip
+curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/awscliv2.zip
+rm -rf /tmp/aws
+unzip -q /tmp/awscliv2.zip -d /tmp
+/tmp/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli --update
+rm -rf /tmp/aws /tmp/awscliv2.zip
 systemctl enable --now docker"
 
 run_ssm_script "#!/usr/bin/env bash
@@ -260,7 +265,7 @@ IDENTITY_DOC="$(curl -fsS -H "X-aws-ec2-metadata-token: ${TOKEN}" http://169.254
 REGION="$(printf '%s' "${IDENTITY_DOC}" | jq -r '.region')"
 ACCOUNT_ID="$(printf '%s' "${IDENTITY_DOC}" | jq -r '.accountId')"
 
-STACK_NAME="$(aws ec2 describe-tags \
+STACK_NAME="$(/usr/local/bin/aws ec2 describe-tags \
   --region "${REGION}" \
   --filters "Name=resource-id,Values=${INSTANCE_ID}" "Name=key,Values=aws:cloudformation:stack-name" \
   --query 'Tags[0].Value' \
