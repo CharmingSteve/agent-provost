@@ -298,6 +298,11 @@ sudo -u provost docker compose --env-file .env.versions down || true
 bootstrap_exports="$(sh bootstrap.sh ec2)"
 eval "${bootstrap_exports}"
 chown -R provost:provost /opt/agent-provost/.secrets
+mkdir -p /opt/agent-provost/logs/fluent-bit-storage
+chown -R 65532:65532 /opt/agent-provost/logs/fluent-bit-storage
+export PROVOST_SECRETS_DIR="/opt/agent-provost/.secrets"
+export ALPACA_API_KEY="$(cat /opt/agent-provost/.secrets/alpaca_api_key)"
+export ALPACA_SECRET_KEY="$(cat /opt/agent-provost/.secrets/alpaca_secret_key)"
 sudo -E -u provost docker compose --env-file .env.versions up -d
 BOOTWRAP
 
