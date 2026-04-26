@@ -1,0 +1,329 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Agent Provost – AWS Marketplace AMI product. Launches a single Graviton EC2
+  instance with least-privilege IAM, Secrets Manager integration, and an
+  audit-grade S3 log bucket.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ──────────────────────────────────────────────────────────────────────────────
+Parameters:
+
+  # ── Marketplace AMI ──────────────────────────────────────────────────────────
+  ImageId:
+    Type: AWS::EC2::Image::Id
+    Description: >
+      AMI ID injected by AWS Marketplace (do not change). The Marketplace
+      substitutes the correct regional Agent Provost golden AMI automatically.
+
+  # ── Networking ───────────────────────────────────────────────────────────────
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: ID of the existing VPC in which to launch the instance.
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: >
+      ID of the existing subnet (public or private with NAT) in which to
+      launch the instance.
+
+  # ── Compute ──────────────────────────────────────────────────────────────────
+  InstanceType:
+    Type: String
+    Default: t4g.micro
+    AllowedValues:
+      - t4g.micro
+      - t4g.small
+      - t4g.medium
+      - t4g.large
+    Description: >
+      Graviton (ARM64) instance size. Start with t4g.micro for evaluation and
+      scale up only if needed.
+
+  # ── Secrets ───────────────────────────────────────────────────────────────────
+  AlpacaApiKey:
+    Type: String
+    NoEcho: true
+    Description: Alpaca Markets API key (paper or live).
+
+  AlpacaSecretKey:
+    Type: String
+    NoEcho: true
+    Description: Alpaca Markets secret key (paper or live).
+
+  ProvostToken:
+    Type: String
+    NoEcho: true
+    Description: >
+      Bearer token used to authenticate requests to the Agent Provost proxy.
+      Choose a strong random value (e.g. openssl rand -hex 32).
+
+  AlpacaPaperTrade:
+    Type: String
+    Default: 'True'
+    AllowedValues:
+      - 'True'
+      - 'False'
+    Description: >
+      Set to True to route orders to Alpaca paper trading; False for live
+      trading. Defaults to True for safety.
+
+  # ── Log storage ───────────────────────────────────────────────────────────
+  EnableObjectLock:
+    Type: String
+    Default: 'No'
+    AllowedValues:
+      - 'Yes'
+      - 'No'
+    Description: >
+      Set to Yes to enable S3 Object Lock on the audit log bucket (immutable
+      logs, cannot delete bucket until all objects expire). Set to No for
+      evaluation or dev deployments where easy teardown is needed.
+
+  ObjectLockRetentionDays:
+    Type: Number
+    Default: 90
+    MinValue: 1
+    MaxValue: 3650
+    Description: >
+      Retention period in days for audit logs (1 = 1 day, 3650 = ~10 years).
+      Only applied when EnableObjectLock is Yes. Uses GOVERNANCE mode so
+      account administrators can still remove objects if required.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Metadata – AWS Marketplace / CloudFormation console UX grouping
+# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Conditions
+# ──────────────────────────────────────────────────────────────────────────────
+Conditions:
+  ObjectLockEnabledCondition: !Equals [!Ref EnableObjectLock, 'Yes']
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Metadata – AWS Marketplace / CloudFormation console UX grouping
+# ──────────────────────────────────────────────────────────────────────────────
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Marketplace AMI"
+        Parameters:
+          - ImageId
+      - Label:
+          default: "Compute"
+        Parameters:
+          - InstanceType
+      - Label:
+          default: "Networking"
+        Parameters:
+          - VpcId
+          - SubnetId
+      - Label:
+          default: "Secrets & Configuration"
+        Parameters:
+          - AlpacaApiKey
+          - AlpacaSecretKey
+          - ProvostToken
+          - AlpacaPaperTrade
+      - Label:
+          default: "Log Storage (S3)"
+        Parameters:
+          - EnableObjectLock
+          - ObjectLockRetentionDays
+    ParameterLabels:
+      ImageId:
+        default: "Agent Provost AMI ID"
+      VpcId:
+        default: "VPC"
+      SubnetId:
+        default: "Subnet"
+      InstanceType:
+        default: "Instance Type"
+      AlpacaApiKey:
+        default: "Alpaca API Key"
+      AlpacaSecretKey:
+        default: "Alpaca Secret Key"
+      ProvostToken:
+        default: "Provost Token"
+      AlpacaPaperTrade:
+        default: "Enable Paper Trading"
+      EnableObjectLock:
+        default: "Lock audit logs in S3? (Yes / No)"
+      ObjectLockRetentionDays:
+        default: "Log retention period (days, 1-3650)"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resources
+# ──────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── 1. Secrets Manager secret ─────────────────────────────────────────────
+  AgentProvostSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "agent-provost/${AWS::StackName}"
+      Description: "Agent Provost runtime secrets (Alpaca keys + Provost token)"
+      SecretString: !Sub |
+        {"ALPACA_API_KEY":"${AlpacaApiKey}","ALPACA_SECRET_KEY":"${AlpacaSecretKey}","ALPACA_PAPER_TRADE":"${AlpacaPaperTrade}","PROVOST_TOKEN":"${ProvostToken}"}
+      Tags:
+        - Key: Project
+          Value: agent-provost
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ── 2. S3 bucket for Fluent Bit logs ──────────────────────────────────────
+  LogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "agent-provost-logs-${AWS::AccountId}-${AWS::Region}-${AWS::StackName}"
+      ObjectLockEnabled: !If [ObjectLockEnabledCondition, true, false]
+      VersioningConfiguration:
+        Status: Enabled
+      ObjectLockConfiguration: !If
+        - ObjectLockEnabledCondition
+        - ObjectLockEnabled: Enabled
+          Rule:
+            DefaultRetention:
+              Mode: GOVERNANCE
+              Days: !Ref ObjectLockRetentionDays
+        - !Ref AWS::NoValue
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: agent-provost
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ── 3. IAM role (least privilege) ─────────────────────────────────────────
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "agent-provost-instance-role-${AWS::StackName}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: AgentProvostLeastPrivilege
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadSecret
+                Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref AgentProvostSecret
+              - Sid: WriteLogs
+                Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub "${LogsBucket.Arn}/*"
+      Tags:
+        - Key: Project
+          Value: agent-provost
+        - Key: ManagedBy
+          Value: cloudformation
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "agent-provost-instance-profile-${AWS::StackName}"
+      Roles:
+        - !Ref InstanceRole
+
+  # ── 4. Security Group ──────────────────────────────────────────────────────
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Agent Provost - allow inbound port 8088 only; full outbound"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8088
+          ToPort: 8088
+          CidrIp: 0.0.0.0/0
+          Description: "Agent Provost proxy HTTPS port"
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+          Description: "Allow all outbound (internet access for Alpaca + AWS APIs)"
+      Tags:
+        - Key: Name
+          Value: !Sub "agent-provost-sg-${AWS::StackName}"
+        - Key: Project
+          Value: agent-provost
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ── 5. EC2 Instance ────────────────────────────────────────────────────────
+  ProvostInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref SubnetId
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds:
+        - !GetAtt InstanceSecurityGroup.GroupId
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 16
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          export PROVOST_SECRET_NAME='${AgentProvostSecret}'
+          export S3_BUCKET='${LogsBucket}'
+          export AWS_REGION='${AWS::Region}'
+          cd /opt/agent-provost
+          eval "$(/opt/agent-provost/bootstrap.sh ec2)"
+          docker compose up -d
+      Tags:
+        - Key: Name
+          Value: !Sub "agent-provost-${AWS::StackName}"
+        - Key: Project
+          Value: agent-provost
+        - Key: ManagedBy
+          Value: cloudformation
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ──────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  InstanceId:
+    Description: EC2 Instance ID of the Agent Provost node
+    Value: !Ref ProvostInstance
+
+  InstancePrivateIp:
+    Description: Private IP address of the Agent Provost instance
+    Value: !GetAtt ProvostInstance.PrivateIp
+
+  ProxyEndpoint:
+    Description: >
+      Agent Provost proxy endpoint (accessible from within the VPC or via
+      a load balancer / VPN).
+    Value: !Sub "http://${ProvostInstance.PrivateIp}:8088"
+
+  SecretArn:
+    Description: ARN of the Secrets Manager secret that holds the runtime credentials
+    Value: !Ref AgentProvostSecret
+
+  LogsBucketName:
+    Description: Name of the S3 bucket receiving Fluent Bit audit logs
+    Value: !Ref LogsBucket
