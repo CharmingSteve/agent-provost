@@ -164,7 +164,7 @@ Resources:
       Name: !Sub "agent-provost/${AWS::StackName}"
       Description: "Agent Provost runtime secrets (Alpaca keys + Provost token)"
       SecretString: !Sub |
-        {"ALPACA_API_KEY":"${AlpacaApiKey}","ALPACA_SECRET_KEY":"${AlpacaSecretKey}","ALPACA_PAPER_TRADE":"${AlpacaPaperTrade}","PROVOST_TOKEN":"${ProvostToken}"}
+        {"ALPACA_API_KEY":"${AlpacaApiKey}","ALPACA_SECRET_KEY":"${AlpacaSecretKey}","ALPACA_PAPER_TRADE":"${AlpacaPaperTrade}","PROVOST_TOKEN":"${ProvostToken}","S3_BUCKET":"${LogsBucket}","AWS_REGION":"${AWS::Region}"}
       Tags:
         - Key: Project
           Value: agent-provost
