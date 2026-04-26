@@ -228,7 +228,7 @@ run_ssm_script "#!/usr/bin/env bash
 set -xe
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y jq docker.io docker-compose-v2 git ca-certificates curl
+apt-get install -y jq docker.io docker-compose-v2 git ca-certificates curl awscli
 systemctl enable --now docker"
 
 run_ssm_script "#!/usr/bin/env bash
