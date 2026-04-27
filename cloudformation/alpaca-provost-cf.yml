@@ -27,6 +27,16 @@ Parameters:
       ID of the existing subnet (public or private with NAT) in which to
       launch the instance.
 
+  AssignPublicIp:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >
+      Set to true to associate a public IPv4 address with the instance
+      primary network interface.
+
   # ── Compute ──────────────────────────────────────────────────────────────────
   InstanceType:
     Type: String
@@ -68,6 +78,31 @@ Parameters:
       Set to True to route orders to Alpaca paper trading; False for live
       trading. Defaults to True for safety.
 
+  MaxTradeNotional:
+    Type: Number
+    Default: 10000
+    Description: Maximum dollar notional allowed for a single trade.
+
+  MaxSharesPerTrade:
+    Type: Number
+    Default: 100
+    Description: Maximum number of shares allowed for a single trade.
+
+  AllowedSymbols:
+    Type: String
+    Default: "SPY,QQQ,AAPL,MSFT"
+    Description: "Comma-separated list of allowed symbols"
+
+  BlockedSymbols:
+    Type: String
+    Default: "GME,AMC"
+    Description: "Comma-separated list of blocked symbols"
+
+  AllowedAssetClasses:
+    Type: String
+    Default: "us_equity"
+    Description: "Comma-separated list of allowed asset classes"
+
   # ── Log storage ───────────────────────────────────────────────────────────
   EnableObjectLock:
     Type: String
@@ -98,6 +133,7 @@ Parameters:
 # ──────────────────────────────────────────────────────────────────────────────
 Conditions:
   ObjectLockEnabledCondition: !Equals [!Ref EnableObjectLock, 'Yes']
+  AssignPublicIpCondition: !Equals [!Ref AssignPublicIp, 'true']
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Metadata – AWS Marketplace / CloudFormation console UX grouping
@@ -118,6 +154,7 @@ Metadata:
         Parameters:
           - VpcId
           - SubnetId
+          - AssignPublicIp
       - Label:
           default: "Secrets & Configuration"
         Parameters:
@@ -125,6 +162,14 @@ Metadata:
           - AlpacaSecretKey
           - ProvostToken
           - AlpacaPaperTrade
+      - Label:
+          default: "Rules Engine"
+        Parameters:
+          - MaxTradeNotional
+          - MaxSharesPerTrade
+          - AllowedSymbols
+          - BlockedSymbols
+          - AllowedAssetClasses
       - Label:
           default: "Log Storage (S3)"
         Parameters:
@@ -137,6 +182,8 @@ Metadata:
         default: "VPC"
       SubnetId:
         default: "Subnet"
+      AssignPublicIp:
+        default: "Assign Public IP"
       InstanceType:
         default: "Instance Type"
       AlpacaApiKey:
@@ -147,6 +194,16 @@ Metadata:
         default: "Provost Token"
       AlpacaPaperTrade:
         default: "Enable Paper Trading"
+      MaxTradeNotional:
+        default: "Max Trade Notional"
+      MaxSharesPerTrade:
+        default: "Max Shares Per Trade"
+      AllowedSymbols:
+        default: "Allowed Symbols"
+      BlockedSymbols:
+        default: "Blocked Symbols"
+      AllowedAssetClasses:
+        default: "Allowed Asset Classes"
       EnableObjectLock:
         default: "Lock audit logs in S3? (Yes / No)"
       ObjectLockRetentionDays:
@@ -164,7 +221,7 @@ Resources:
       Name: !Sub "agent-provost-secret-${AWS::StackName}"
       Description: "Agent Provost runtime secrets (Alpaca keys + Provost token)"
       SecretString: !Sub |
-        {"ALPACA_API_KEY":"${AlpacaApiKey}","ALPACA_SECRET_KEY":"${AlpacaSecretKey}","ALPACA_PAPER_TRADE":"${AlpacaPaperTrade}","PROVOST_TOKEN":"${ProvostToken}","S3_BUCKET":"${LogsBucket}","AWS_REGION":"${AWS::Region}"}
+        {"ALPACA_API_KEY":"${AlpacaApiKey}","ALPACA_SECRET_KEY":"${AlpacaSecretKey}","ALPACA_PAPER_TRADE":"${AlpacaPaperTrade}","PROVOST_TOKEN":"${ProvostToken}","S3_BUCKET":"${LogsBucket}","AWS_REGION":"${AWS::Region}","MaxTradeNotional":${MaxTradeNotional},"MaxSharesPerTrade":${MaxSharesPerTrade},"AllowedSymbols":"${AllowedSymbols}","BlockedSymbols":"${BlockedSymbols}","AllowedAssetClasses":"${AllowedAssetClasses}"}
       Tags:
         - Key: Project
           Value: agent-provost
@@ -276,10 +333,13 @@ Resources:
     Properties:
       ImageId: !Ref ImageId
       InstanceType: !Ref InstanceType
-      SubnetId: !Ref SubnetId
       IamInstanceProfile: !Ref InstanceProfile
-      SecurityGroupIds:
-        - !GetAtt InstanceSecurityGroup.GroupId
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref SubnetId
+          GroupSet:
+            - !GetAtt InstanceSecurityGroup.GroupId
+          AssociatePublicIpAddress: !If [AssignPublicIpCondition, true, false]
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:

@@ -295,6 +295,52 @@ export AWS_REGION="${REGION}"
 export S3_BUCKET="${S3_BUCKET}"
 export ALLOW_EC2_LOCAL_FALLBACK_SECRETS="false"
 
+SECRET_STRING="$(/usr/local/bin/aws secretsmanager get-secret-value \
+  --region "${REGION}" \
+  --secret-id "${SECRET_NAME}" \
+  --query 'SecretString' \
+  --output text)"
+
+# Render dynamic rules config from secret payload.
+printf '%s\n' "${SECRET_STRING}" | jq -e . >/dev/null
+printf '%s\n' "${SECRET_STRING}" | jq '
+  def split_csv:
+    split(",")
+    | map(gsub("^\\s+|\\s+$"; ""))
+    | map(select(length > 0));
+  def to_num:
+    if type == "number" then . else tonumber end;
+  {
+    max_trade_size: {
+      enabled: true,
+      description: "Block trades whose quantity exceeds the configured limit. Protects against oversized orders from a runaway agent.",
+      params: { limit: (.MaxSharesPerTrade | to_num) }
+    },
+    max_trade_notional: {
+      enabled: true,
+      description: "Block trades whose dollar notional value exceeds the configured limit.",
+      params: { limit: (.MaxTradeNotional | to_num) }
+    },
+    allowed_symbols: {
+      enabled: true,
+      description: "Allow trading only for symbols in this list.",
+      params: { symbols: (.AllowedSymbols | split_csv) }
+    },
+    blocked_tickers: {
+      enabled: true,
+      description: "Block trades on tickers that appear in the restricted symbol list. Prevents unauthorized exposure to specific securities.",
+      params: { tickers: (.BlockedSymbols | split_csv) }
+    },
+    allowed_asset_classes: {
+      enabled: true,
+      description: "Allow trading only for listed asset classes.",
+      params: { classes: (.AllowedAssetClasses | split_csv) }
+    }
+  }
+' >/opt/agent-provost/rules.json
+chown provost:provost /opt/agent-provost/rules.json
+chmod 0644 /opt/agent-provost/rules.json
+
 cd /opt/agent-provost
 sudo -u provost docker compose --env-file .env.versions down || true
 bootstrap_exports="$(sh bootstrap.sh ec2)"
