@@ -201,7 +201,12 @@ case "$MODE" in
     write_secret_file "$SECRET_KEY" "$PROVOST_SECRETS_DIR/alpaca_secret_key"
     write_secret_file "$PAPER_TRADE" "$PROVOST_SECRETS_DIR/alpaca_paper_trade"
     write_secret_file "$PROVOST_TOKEN_VALUE" "$PROVOST_SECRETS_DIR/provost_token"
-    sync_local_fallback_secrets "$PROVOST_SECRETS_DIR"
+
+    # Production safety default: keep secrets on tmpfs only.
+    # Enable fallback copy explicitly for break-glass troubleshooting.
+    if is_true "${ALLOW_EC2_LOCAL_FALLBACK_SECRETS:-false}"; then
+      sync_local_fallback_secrets "$PROVOST_SECRETS_DIR"
+    fi
 
     echo "export PROVOST_SECRETS_DIR='$PROVOST_SECRETS_DIR'"
     echo "export PROVOST_RUN_DIR='$PROVOST_RUN_DIR'"
