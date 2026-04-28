@@ -243,8 +243,7 @@ git clone --depth 1 https://github.com/CharmingSteve/agent-provost /opt/agent-pr
 cd /opt/agent-provost
 docker compose --env-file .env.versions pull"
 
-run_ssm_script "$(cat <<'SSM_SCRIPT'
-#!/usr/bin/env bash
+run_ssm_script "#!/usr/bin/env bash
 set -xe
 
 if ! id -u provost >/dev/null 2>&1; then
@@ -255,116 +254,10 @@ usermod -aG docker provost
 chown -R provost:provost /opt/agent-provost
 
 install -d -m 755 /var/lib/cloud/scripts/per-boot
-cat >/var/lib/cloud/scripts/per-boot/01-agent-provost-boot.sh <<'BOOTWRAP'
-#!/usr/bin/env bash
-set -euo pipefail
+cp /opt/agent-provost/scripts/sync_state.sh /var/lib/cloud/scripts/per-boot/01-agent-provost-boot.sh
+chmod 755 /opt/agent-provost/scripts/sync_state.sh /var/lib/cloud/scripts/per-boot/01-agent-provost-boot.sh
 
-TOKEN="$(curl -fsS -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600')"
-INSTANCE_ID="$(curl -fsS -H "X-aws-ec2-metadata-token: ${TOKEN}" http://169.254.169.254/latest/meta-data/instance-id)"
-IDENTITY_DOC="$(curl -fsS -H "X-aws-ec2-metadata-token: ${TOKEN}" http://169.254.169.254/latest/dynamic/instance-identity/document)"
-REGION="$(printf '%s' "${IDENTITY_DOC}" | jq -r '.region')"
-ACCOUNT_ID="$(printf '%s' "${IDENTITY_DOC}" | jq -r '.accountId')"
-
-STACK_NAME="$(/usr/local/bin/aws ec2 describe-tags \
-  --region "${REGION}" \
-  --filters "Name=resource-id,Values=${INSTANCE_ID}" "Name=key,Values=aws:cloudformation:stack-name" \
-  --query 'Tags[0].Value' \
-  --output text)"
-
-if [ -z "${STACK_NAME}" ] || [ "${STACK_NAME}" = "None" ]; then
-  echo "Unable to determine CloudFormation stack name from instance tags" >&2
-  exit 1
-fi
-
-SECRET_NAME="agent-provost-secret-${STACK_NAME}"
-S3_BUCKET="agent-provost-logs-${ACCOUNT_ID}-${REGION}-${STACK_NAME}"
-
-install -d -m 755 /run/secrets
-if ! mountpoint -q /run/secrets; then
-  mount -t tmpfs -o size=1M,mode=755 tmpfs /run/secrets
-fi
-
-printf '%s' "${SECRET_NAME}" >/run/secrets/aws_secret_id
-printf '%s' "${S3_BUCKET}" >/run/secrets/s3_bucket
-printf '%s' "${REGION}" >/run/secrets/aws_region
-chmod 600 /run/secrets/aws_secret_id /run/secrets/s3_bucket /run/secrets/aws_region
-chown provost:provost /run/secrets /run/secrets/aws_secret_id /run/secrets/s3_bucket /run/secrets/aws_region
-
-export PROVOST_SECRET_NAME="${SECRET_NAME}"
-export AWS_REGION="${REGION}"
-export S3_BUCKET="${S3_BUCKET}"
-export ALLOW_EC2_LOCAL_FALLBACK_SECRETS="false"
-
-SECRET_STRING="$(/usr/local/bin/aws secretsmanager get-secret-value \
-  --region "${REGION}" \
-  --secret-id "${SECRET_NAME}" \
-  --query 'SecretString' \
-  --output text)"
-
-# Render dynamic rules config from secret payload.
-printf '%s\n' "${SECRET_STRING}" | jq -e . >/dev/null
-printf '%s\n' "${SECRET_STRING}" | jq '
-  def split_csv:
-    split(",")
-    | map(gsub("^\\s+|\\s+$"; ""))
-    | map(select(length > 0));
-  def to_num:
-    if type == "number" then . else tonumber end;
-  {
-    max_trade_size: {
-      enabled: true,
-      description: "Block trades whose quantity exceeds the configured limit. Protects against oversized orders from a runaway agent.",
-      params: { limit: (.MaxSharesPerTrade | to_num) }
-    },
-    max_trade_notional: {
-      enabled: true,
-      description: "Block trades whose dollar notional value exceeds the configured limit.",
-      params: { limit: (.MaxTradeNotional | to_num) }
-    },
-    allowed_symbols: {
-      enabled: true,
-      description: "Allow trading only for symbols in this list.",
-      params: { symbols: (.AllowedSymbols | split_csv) }
-    },
-    blocked_tickers: {
-      enabled: true,
-      description: "Block trades on tickers that appear in the restricted symbol list. Prevents unauthorized exposure to specific securities.",
-      params: { tickers: (.BlockedSymbols | split_csv) }
-    },
-    allowed_asset_classes: {
-      enabled: true,
-      description: "Allow trading only for listed asset classes.",
-      params: { classes: (.AllowedAssetClasses | split_csv) }
-    }
-  }
-' >/opt/agent-provost/rules.json
-chown provost:provost /opt/agent-provost/rules.json
-chmod 0644 /opt/agent-provost/rules.json
-
-cd /opt/agent-provost
-sudo -u provost docker compose --env-file .env.versions down || true
-bootstrap_exports="$(sh bootstrap.sh ec2)"
-eval "${bootstrap_exports}"
-# Keep only tmpfs-backed secrets for runtime mounts.
-cp /run/provost-secrets/alpaca_api_key /run/secrets/alpaca_api_key
-cp /run/provost-secrets/alpaca_secret_key /run/secrets/alpaca_secret_key
-cp /run/provost-secrets/alpaca_paper_trade /run/secrets/alpaca_paper_trade
-cp /run/provost-secrets/provost_token /run/secrets/provost_token
-# Ensure mounted secret files are readable by non-root container UIDs.
-chmod 444 /run/secrets/alpaca_api_key /run/secrets/alpaca_secret_key /run/secrets/alpaca_paper_trade /run/secrets/provost_token
-chown root:root /run/secrets/alpaca_api_key /run/secrets/alpaca_secret_key /run/secrets/alpaca_paper_trade /run/secrets/provost_token
-rm -rf /opt/agent-provost/.secrets
-mkdir -p /opt/agent-provost/logs/fluent-bit-storage
-chown -R 65532:65532 /opt/agent-provost/logs/fluent-bit-storage
-export PROVOST_SECRETS_DIR="/run/secrets"
-export ALPACA_API_KEY="$(cat /run/secrets/alpaca_api_key)"
-export ALPACA_SECRET_KEY="$(cat /run/secrets/alpaca_secret_key)"
-sudo -E -u provost docker compose --env-file .env.versions up -d
-BOOTWRAP
-
-chmod 755 /var/lib/cloud/scripts/per-boot/01-agent-provost-boot.sh
-SSM_SCRIPT
-)"
+(crontab -l 2>/dev/null | grep -v '/opt/agent-provost/scripts/sync_state.sh' || true; echo '*/10 * * * * /bin/bash /opt/agent-provost/scripts/sync_state.sh > /var/log/sync_state.log 2>&1') | crontab -"
 
 run_ssm_script "#!/usr/bin/env bash
 set -xe
