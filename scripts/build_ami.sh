@@ -8,6 +8,7 @@ INSTANCE_ID=""
 SECURITY_GROUP_ID=""
 AMI_ID=""
 TIMESTAMP="${TIMESTAMP:-$(date -u +%Y%m%d%H%M%S)}"
+SOURCE_REF="${GITHUB_REF_NAME:-main}"
 
 aws_cli() {
   aws "${AWS_BASE_ARGS[@]}" "$@"
@@ -239,7 +240,7 @@ systemctl enable --now docker"
 run_ssm_script "#!/usr/bin/env bash
 set -xe
 if [ -d /opt/agent-provost ]; then rm -rf /opt/agent-provost; fi
-git clone --depth 1 https://github.com/CharmingSteve/agent-provost /opt/agent-provost
+git clone --depth 1 --branch '${SOURCE_REF}' https://github.com/CharmingSteve/agent-provost /opt/agent-provost
 cd /opt/agent-provost
 docker compose --env-file .env.versions pull"
 
