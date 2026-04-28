@@ -64,7 +64,18 @@ Each top-level key names a rule. Every rule object **must** contain:
 
 #### `max_trade_size`
 
-Blocks any request whose `quantity` or `qty` field exceeds `params.limit`.
+Blocks requests whose share quantity exceeds `params.limit`.
+
+Accepted quantity fields:
+
+- `quantity`
+- `qty`
+- `order_quantity`
+
+Also evaluates notional orders (`notional`) to prevent quantity-limit bypass.
+
+- If `limit_price` is present and valid, estimated shares are calculated as `notional / limit_price`.
+- If `limit_price` is missing or invalid for a notional order, the request is blocked (fail-safe).
 
 ```json
 "max_trade_size": {
@@ -80,6 +91,70 @@ Blocks any request whose `quantity` or `qty` field exceeds `params.limit`.
 |---|---|---|---|
 | `limit` | number | 100 | Maximum allowed trade quantity (inclusive boundary: `qty > limit` blocks) |
 
+#### `max_trade_notional`
+
+Blocks requests whose estimated dollar value exceeds `params.limit`.
+
+Evaluation order:
+
+- If `notional` is provided and positive, that value is used.
+- Otherwise, when both quantity and `limit_price` are present and valid, estimated value is `qty * limit_price`.
+- Notional orders without valid `limit_price` are blocked (fail-safe).
+
+```json
+"max_trade_notional": {
+  "enabled": true,
+  "description": "Block trades whose dollar notional value exceeds the configured limit.",
+  "params": {
+    "limit": 50000
+  }
+}
+```
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `limit` | number | 50000 | Maximum allowed per-order notional value |
+
+#### `cumulative_trade_notional`
+
+Blocks requests when rolling cumulative exposure for a `(user, machine, symbol)` key would exceed `params.limit` within `params.window_seconds`.
+
+This rule uses the `provost_ctx` shared dictionary to maintain per-identity rolling state. If risk state cannot be updated safely, requests are blocked to avoid untracked exposure.
+
+```json
+"cumulative_trade_notional": {
+  "enabled": true,
+  "description": "Block cumulative dollar exposure across multiple orders within a short rolling window.",
+  "params": {
+    "limit": 50000,
+    "window_seconds": 300
+  }
+}
+```
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `limit` | number | 50000 | Maximum cumulative notional within the active window |
+| `window_seconds` | number | 300 | Rolling window length in seconds |
+
+#### `symbol_order_cooldown`
+
+Blocks repeat orders for the same symbol within a rolling cooldown window for a `(user, machine, symbol)` key.
+
+```json
+"symbol_order_cooldown": {
+  "enabled": true,
+  "description": "Block repeat orders for the same symbol within a rolling time window.",
+  "params": {
+    "window_seconds": 300
+  }
+}
+```
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `window_seconds` | number | 300 | Cooldown duration for repeat orders on the same symbol |
+
 #### `blocked_tickers`
 
 Blocks any request whose `ticker` or equivalent symbol field matches a symbol in `params.tickers`.
@@ -91,17 +166,8 @@ Blocks any request whose `ticker` or equivalent symbol field matches a symbol in
   "params": {
     "tickers": ["GME", "AMC", "BBBY"]
   }
-  **Notional Order Handling (New)**
 }
-  The `max_trade_size` rule also evaluates **notional (dollar-based)** orders to prevent bypassing the share-count limit via quantity-free specifications. When a request includes a `notional` field but no explicit quantity:
 ```
-  1. **If `limit_price` is provided**: Estimate the share count as `notional / limit_price` and block if it exceeds the limit.
-  2. **If `limit_price` is missing or invalid**: **Fail-safe: block the order.** Cannot safely determine the share count without a price, so the request is rejected.
-
-  **Example scenarios:**
-  - `notional: 10000, limit_price: 100` → estimated 100 shares (at limit, allowed)
-  - `notional: 10001, limit_price: 100` → estimated 100.01 shares (over limit, blocked)
-  - `notional: 50000, limit_price: null` → cannot estimate shares, blocked (fail-safe)
 | Param | Type | Description |
 |---|---|---|
 | `tickers` | string[] | List of exact ticker symbols to reject |
@@ -181,7 +247,7 @@ curl -s -X POST http://localhost:8088/mcp \
 # → {"error":"PROVOST_INTERVENTION: Risk Limit Exceeded..."}
 
 # Lower the limit to 10 by editing rules.json on the host
-sed -i 's/"limit": 100/"limit": 10/' rules.json
+perl -0777 -i -pe 's/"limit": 100/"limit": 10/' rules.json
 
 # Wait up to 10 seconds for the reload timer to fire, then retry
 sleep 12
@@ -192,7 +258,7 @@ curl -s -X POST http://localhost:8088/mcp \
 # A trade of 50 is now blocked because the limit is 10.
 
 # Restore
-sed -i 's/"limit": 10/"limit": 100/' rules.json
+perl -0777 -i -pe 's/"limit": 10/"limit": 100/' rules.json
 ```
 
 ---
