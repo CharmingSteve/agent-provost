@@ -49,6 +49,65 @@ local function get_tool_name(parsed)
     return nil
 end
 
+local function normalize_asset_class(value)
+    local cleaned = normalize_identifier(value)
+    if not cleaned then
+        return nil
+    end
+    local lowered = cleaned:lower()
+    if lowered == "equity" or lowered == "stock" then
+        return "us_equity"
+    end
+    if lowered == "option" or lowered == "options" then
+        return "us_option"
+    end
+    return lowered
+end
+
+local function infer_asset_class(tool_name, args)
+    if type(args) == "table" then
+        local explicit = normalize_asset_class(args.asset_class)
+        if explicit then
+            return explicit
+        end
+    end
+
+    if type(tool_name) ~= "string" or tool_name == "" then
+        return nil
+    end
+
+    local normalized_tool = tool_name:lower()
+    if normalized_tool:find("place_crypto_order", 1, true) then
+        return "crypto"
+    end
+    if normalized_tool:find("place_option_order", 1, true)
+       or normalized_tool:find("exercise_options_position", 1, true)
+       or normalized_tool:find("options", 1, true) then
+        return "us_option"
+    end
+    if normalized_tool:find("place_stock_order", 1, true)
+       or normalized_tool:find("place_etf_order", 1, true)
+       or normalized_tool:find("place_equity_order", 1, true) then
+        return "us_equity"
+    end
+
+    return nil
+end
+
+local function is_allowed_asset_class(classes, candidate)
+    if type(classes) ~= "table" or candidate == nil then
+        return false
+    end
+
+    for _, class_name in ipairs(classes) do
+        if normalize_asset_class(class_name) == candidate then
+            return true
+        end
+    end
+
+    return false
+end
+
 local function normalize_quantity(args)
     if type(args) ~= "table" then
         return nil
@@ -186,6 +245,24 @@ function _M.check_request(parsed, rules, context)
     local args = parsed.params.arguments
 
     local tool_name = get_tool_name(parsed)
+
+    -- ----------------------------------------------------------------
+    -- Rule: allowed_asset_classes
+    -- Restricts mutating trade tools to a configured asset class allowlist.
+    -- ----------------------------------------------------------------
+    local allowed_classes_rule = rules.allowed_asset_classes
+    if type(allowed_classes_rule) == "table"
+       and allowed_classes_rule.enabled == true
+       and type(allowed_classes_rule.params) == "table"
+       and type(allowed_classes_rule.params.classes) == "table" then
+        local inferred_class = infer_asset_class(tool_name, args)
+        if inferred_class ~= nil
+           and not is_allowed_asset_class(allowed_classes_rule.params.classes, inferred_class) then
+            return true,
+                "PROVOST_INTERVENTION: Asset class '" .. inferred_class ..
+                "' is not allowed by current policy."
+        end
+    end
 
     -- ----------------------------------------------------------------
     -- Rule: max_trade_size
