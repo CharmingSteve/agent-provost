@@ -18,12 +18,12 @@
 }
 
 @test ".env.versions pins python base image by digest" {
-  run grep -E '^BASE_PYTHON_IMAGE=python:3\.11-alpine@sha256:[a-f0-9]{64}$' .env.versions
+  run grep -E '^BASE_PYTHON_IMAGE=public\.ecr\.aws/docker/library/python:3\.11-alpine@sha256:[a-f0-9]{64}$' .env.versions
   [ "$status" -eq 0 ]
 }
 
 @test ".env.versions pins fluent-bit image by digest" {
-  run grep -E '^FLUENT_BIT_IMAGE=fluent/fluent-bit@sha256:[a-f0-9]{64}$' .env.versions
+  run grep -E '^FLUENT_BIT_IMAGE=public\.ecr\.aws/aws-observability/aws-for-fluent-bit@sha256:[a-f0-9]{64}$' .env.versions
   [ "$status" -eq 0 ]
 }
 
@@ -119,8 +119,16 @@
   [ "$status" -eq 0 ]
 }
 
-@test "build-secure-push-test depends on compose-smoke and security jobs" {
-  run grep -E 'needs: \[test-lua, test-shell, lint-github-actions, security-zizmor, log-schema-validation, compose-smoke, security-trivy, security-python-audit\]' .github/workflows/ci.yml
+@test "build-secure-push-test runs independently and pushes only on image changes" {
+  run grep -E '^  build-secure-push-test:' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'Detect image content changes' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'if: env\.IMAGE_CHANGED == '\''true'\''' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run sh -c "awk '/^  build-secure-push-test:/{flag=1; next} /^  [a-zA-Z0-9_-]+:/{if(flag) exit} flag' .github/workflows/ci.yml | grep -E '^\\s+needs:'"
+  [ "$status" -ne 0 ]
+  run grep -E 'Step 4 \(Login & Push to ECR\) - Push tags' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 

@@ -401,20 +401,71 @@ jobs:
   build-secure-push-test:
     name: Build -> Secure -> Push -> Test (ECR Public)
     runs-on: ubuntu-24.04-arm
-    needs: [test-lua, test-shell, lint-github-actions, security-zizmor, log-schema-validation, compose-smoke, security-trivy, security-python-audit]
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect image content changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          base=""
+          head="${GITHUB_SHA}"
+
+          if [ "${EVENT_NAME}" = "push" ]; then
+            base="${PUSH_BEFORE}"
+          elif [ "${EVENT_NAME}" = "pull_request" ]; then
+            base="${PR_BASE_SHA}"
+            head="${PR_HEAD_SHA}"
+          fi
+
+          if [ -z "${base}" ] || [ "${base}" = "0000000000000000000000000000000000000000" ]; then
+            echo "IMAGE_CHANGED=true" >> "$GITHUB_ENV"
+            echo "Detected initial/unknown diff range; forcing image push."
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "${base}" "${head}" || true)"
+          echo "Changed files:"
+          printf '%s\n' "${changed_files}"
+
+          if printf '%s\n' "${changed_files}" | grep -Eq '^(alpaca-mcp\.Dockerfile|hash-pip/requirements-runtime\.txt|\.env\.versions)$'; then
+            echo "IMAGE_CHANGED=true" >> "$GITHUB_ENV"
+            echo "Image-defining files changed; build/push enabled."
+          else
+            echo "IMAGE_CHANGED=false" >> "$GITHUB_ENV"
+            echo "Image-defining files unchanged; build/push skipped."
+          fi
+      - name: Skip push when image inputs are unchanged
+        if: env.IMAGE_CHANGED != 'true'
+        run: echo "No image-defining changes detected; skipping ECR push."
       - name: Set image tags
+        if: env.IMAGE_CHANGED == 'true'
         run: echo "IMAGE_SHA_TAG=${GITHUB_SHA}" >> "$GITHUB_ENV"
       - name: Load image versions from .env.versions
+        if: env.IMAGE_CHANGED == 'true'
         run: grep -v '^#' .env.versions | grep -v '^$' >> "$GITHUB_ENV"
       - name: Stage dummy secrets for build
+        if: env.IMAGE_CHANGED == 'true'
         run: |
           eval "$(sh bootstrap.sh runner)"
+      - name: Assert AWS credentials are configured
+        if: env.IMAGE_CHANGED == 'true'
+        run: |
+          set -euo pipefail
+          if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ] || [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "::error::AWS credentials are required to push updated images to ECR."
+            exit 1
+          fi
       - name: Step 1 (Build)
+        if: env.IMAGE_CHANGED == 'true'
         run: |
           set -euo pipefail
           docker build -f alpaca-mcp.Dockerfile \
@@ -422,21 +473,25 @@ jobs:
             -t public.ecr.aws/e2u9m9o7/agent-provost:latest \
             -t public.ecr.aws/e2u9m9o7/agent-provost:"${IMAGE_SHA_TAG}" .
       - name: Step 2 (Authenticate to AWS)
+        if: env.IMAGE_CHANGED == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
       - name: Step 3 (Login & Push to ECR)
+        if: env.IMAGE_CHANGED == 'true'
         uses: aws-actions/amazon-ecr-login@v2
         with:
           registry-type: public
       - name: Step 4 (Login & Push to ECR) - Push tags
+        if: env.IMAGE_CHANGED == 'true'
         run: |
           set -euo pipefail
           docker push public.ecr.aws/e2u9m9o7/agent-provost:latest
           docker push public.ecr.aws/e2u9m9o7/agent-provost:"${IMAGE_SHA_TAG}"
       - name: Step 5 (Sanity/Integration Tests)
+        if: env.IMAGE_CHANGED == 'true'
         run: |
           set -euo pipefail
           export ALPACA_API_KEY="dummy"
@@ -448,8 +503,8 @@ jobs:
           sudo apt-get install -y bats
           bats tests/shell/
       - name: Capture fluent-bit logs on failure
-        if: failure()
+        if: failure() && env.IMAGE_CHANGED == 'true'
         run: docker logs fluent-bit 2>&1 || true
       - name: Tear down compose stack
-        if: always()
+        if: always() && env.IMAGE_CHANGED == 'true'
         run: docker compose --env-file .env.versions down -v --remove-orphans

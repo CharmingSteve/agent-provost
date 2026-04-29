@@ -2,11 +2,6 @@ name: Build Golden AMI
 
 on:
   workflow_dispatch:
-    inputs:
-      INSTANCE_PROFILE_NAME:
-        description: 'Optional IAM instance profile name for the builder instance'
-        required: false
-        default: ''
   push:
     branches:
       - add-ami

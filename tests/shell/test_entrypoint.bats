@@ -113,7 +113,7 @@
 }
 
 @test "bootstrap.sh: dev and runner still sync local fallback secrets" {
-    run grep -c '^    sync_local_fallback_secrets "\$PROVOST_SECRETS_DIR"$' bootstrap.sh
+    run grep -E -c '^[[:space:]]+sync_local_fallback_secrets "\$PROVOST_SECRETS_DIR"$' bootstrap.sh
     [ "$status" -eq 0 ]
     [ "$output" -ge 2 ]
 }
