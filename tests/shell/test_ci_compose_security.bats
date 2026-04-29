@@ -178,11 +178,11 @@
 @test "requirements-runtime.txt pip 26.1 hashes match known-good PyPI sha256" {
   # Hashes sourced from https://pypi.org/pypi/pip/26.1/json
   # whl artifact sha256
-  run grep -F 'sha256:4e8486d821d814b77319cb7b9e8bf5a4ee7590a643e7cb21029f209be8573c1' \
+  run grep -F 'sha256:4e8486d821d814b77319acb7b9e8bf5a4ee7590a643e7cb21029f209be8573c1' \
     hash-pip/requirements-runtime.txt
   [ "$status" -eq 0 ]
   # sdist artifact sha256
-  run grep -F 'sha256:81e13ebcca3ffa8cc85e4deff5c27e1e26dea0aa7fc2f294a073ac208806ff3' \
+  run grep -F 'sha256:81e13ebcca3ffa8cc85e4deff5c27e1ee26dea0aa7fc2f294a073ac208806ff3' \
     hash-pip/requirements-runtime.txt
   [ "$status" -eq 0 ]
 }
