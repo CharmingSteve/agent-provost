@@ -257,6 +257,8 @@ chown -R provost:provost /opt/agent-provost
 install -d -m 755 /var/lib/cloud/scripts/per-boot
 cp /opt/agent-provost/scripts/sync_state.sh /var/lib/cloud/scripts/per-boot/01-agent-provost-boot.sh
 chmod 755 /opt/agent-provost/scripts/sync_state.sh /var/lib/cloud/scripts/per-boot/01-agent-provost-boot.sh
+cp /opt/agent-provost/scripts/provost-compose.sh /usr/local/bin/provost-compose
+chmod +x /usr/local/bin/provost-compose
 
 (crontab -l 2>/dev/null | grep -v '/opt/agent-provost/scripts/sync_state.sh' || true; echo '*/10 * * * * /bin/bash /opt/agent-provost/scripts/sync_state.sh > /var/log/sync_state.log 2>&1') | crontab -"
 
