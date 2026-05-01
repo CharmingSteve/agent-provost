@@ -35,6 +35,13 @@
       "tickers": ["GME", "AMC", "BBBY"]
     }
   },
+  "allowed_asset_classes": {
+    "enabled": true,
+    "description": "Allow trading only for listed asset classes.",
+    "params": {
+      "classes": ["us_equity", "crypto", "us_option"]
+    }
+  },
   "blocked_tool_names": {
     "enabled": false,
     "description": "Block specific MCP tool names regardless of field variation in the arguments.",

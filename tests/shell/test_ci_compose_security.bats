@@ -18,12 +18,12 @@
 }
 
 @test ".env.versions pins python base image by digest" {
-  run grep -E '^BASE_PYTHON_IMAGE=python:3\.11-alpine@sha256:[a-f0-9]{64}$' .env.versions
+  run grep -E '^BASE_PYTHON_IMAGE=public\.ecr\.aws/docker/library/python:3\.11-alpine@sha256:[a-f0-9]{64}$' .env.versions
   [ "$status" -eq 0 ]
 }
 
 @test ".env.versions pins fluent-bit image by digest" {
-  run grep -E '^FLUENT_BIT_IMAGE=fluent/fluent-bit@sha256:[a-f0-9]{64}$' .env.versions
+  run grep -E '^FLUENT_BIT_IMAGE=public\.ecr\.aws/aws-observability/aws-for-fluent-bit@sha256:[a-f0-9]{64}$' .env.versions
   [ "$status" -eq 0 ]
 }
 
@@ -119,8 +119,16 @@
   [ "$status" -eq 0 ]
 }
 
-@test "build-secure-push-test depends on compose-smoke and security jobs" {
-  run grep -E 'needs: \[test-lua, test-shell, lint-github-actions, security-zizmor, log-schema-validation, compose-smoke, security-trivy, security-python-audit\]' .github/workflows/ci.yml
+@test "build-secure-push-test runs independently and pushes only on image changes" {
+  run grep -E '^  build-secure-push-test:' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'Detect image content changes' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'if: env\.IMAGE_CHANGED == '\''true'\''' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run sh -c "awk '/^  build-secure-push-test:/{flag=1; next} /^  [a-zA-Z0-9_-]+:/{if(flag) exit} flag' .github/workflows/ci.yml | grep -E '^\\s+needs:'"
+  [ "$status" -ne 0 ]
+  run grep -E 'Step 4 \(Login & Push to ECR\) - Push tags' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 
@@ -155,6 +163,45 @@
   run grep -E '^  security-python-audit:' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
   run grep -E 'pip-audit .*hash-pip/requirements-runtime.txt' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+}
+
+@test "requirements-runtime.txt pins pip to CVE-clean version 26.1" {
+  # pip==26.0.1 has CVE-2026-3219; only 26.1 or newer is clean
+  run grep -E '^pip==26\.1' hash-pip/requirements-runtime.txt
+  [ "$status" -eq 0 ]
+  # Must NOT contain the vulnerable version
+  run grep -E '^pip==26\.0\.1' hash-pip/requirements-runtime.txt
+  [ "$status" -ne 0 ]
+}
+
+@test "requirements-runtime.txt pip 26.1 hashes match known-good PyPI sha256" {
+  # Hashes sourced from https://pypi.org/pypi/pip/26.1/json
+  # whl artifact sha256
+  run grep -F 'sha256:4e8486d821d814b77319acb7b9e8bf5a4ee7590a643e7cb21029f209be8573c1' \
+    hash-pip/requirements-runtime.txt
+  [ "$status" -eq 0 ]
+  # sdist artifact sha256
+  run grep -F 'sha256:81e13ebcca3ffa8cc85e4deff5c27e1ee26dea0aa7fc2f294a073ac208806ff3' \
+    hash-pip/requirements-runtime.txt
+  [ "$status" -eq 0 ]
+}
+
+@test "every package pin in requirements-runtime.txt has at least one sha256 hash" {
+  # Extract lines like 'package==version \' and verify the next non-comment line has --hash=sha256:
+  # Approach: no package==x block should have zero hash lines before the next blank/comment
+  local req_file="hash-pip/requirements-runtime.txt"
+  local pkg_count hash_count
+  # Count package==version declarations (lines matching word==version, not comments)
+  pkg_count=$(grep -cE '^[a-zA-Z0-9._-]+==[0-9]' "$req_file")
+  # Count --hash=sha256: entries
+  hash_count=$(grep -cE -- '--hash=sha256:' "$req_file")
+  [ "$pkg_count" -ge 1 ]
+  [ "$hash_count" -ge "$pkg_count" ]
+}
+
+@test "alpaca-mcp.Dockerfile uses --require-hashes for pip install" {
+  run grep -E '\-\-require-hashes' alpaca-mcp.Dockerfile
   [ "$status" -eq 0 ]
 }
 

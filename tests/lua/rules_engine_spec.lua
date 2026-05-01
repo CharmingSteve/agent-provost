@@ -490,6 +490,77 @@ describe("rules_engine: cumulative_trade_notional rule", function()
 
 end)
 
+-- ---------------------------------------------------------------------------
+-- allowed_asset_classes rule
+-- ---------------------------------------------------------------------------
+describe("rules_engine: allowed_asset_classes rule", function()
+
+    local crypto_only = {
+        allowed_asset_classes = {
+            enabled = true,
+            params = { classes = { "crypto" } }
+        }
+    }
+
+    local all_three = {
+        allowed_asset_classes = {
+            enabled = true,
+            params = { classes = { "us_equity", "crypto", "us_option" } }
+        }
+    }
+
+    it("allows crypto tool calls when crypto is allowed", function()
+        local blocked = engine.check_request(
+            make_parsed({ symbol = "BTC/USD", qty = "0.01" }, "place_crypto_order"),
+            crypto_only)
+        assert.is_false(blocked)
+    end)
+
+    it("blocks stock tool calls when only crypto is allowed", function()
+        local blocked, reason = engine.check_request(
+            make_parsed({ symbol = "MSFT", qty = "1" }, "place_stock_order"),
+            crypto_only)
+        assert.is_true(blocked)
+        assert.truthy(reason:find("Asset class"))
+        assert.truthy(reason:find("us_equity"))
+    end)
+
+    it("blocks option tool calls when only crypto is allowed", function()
+        local blocked, reason = engine.check_request(
+            make_parsed({ symbol = "AAPL240621C00195000", qty = "1" }, "place_option_order"),
+            crypto_only)
+        assert.is_true(blocked)
+        assert.truthy(reason:find("us_option"))
+    end)
+
+    it("allows stock, option, and crypto tools when all classes are allowed", function()
+        assert.is_false(engine.check_request(
+            make_parsed({ symbol = "MSFT", qty = "1" }, "place_stock_order"),
+            all_three))
+        assert.is_false(engine.check_request(
+            make_parsed({ symbol = "AAPL240621C00195000", qty = "1" }, "place_option_order"),
+            all_three))
+        assert.is_false(engine.check_request(
+            make_parsed({ symbol = "BTC/USD", qty = "0.01" }, "place_crypto_order"),
+            all_three))
+    end)
+
+    it("honors explicit asset_class when provided by the request payload", function()
+        local blocked = engine.check_request(
+            make_parsed({ symbol = "MSFT", qty = "1", asset_class = "crypto" }, "place_stock_order"),
+            crypto_only)
+        assert.is_false(blocked)
+    end)
+
+    it("does not block unknown tools that cannot be mapped to an asset class", function()
+        local blocked = engine.check_request(
+            make_parsed({ symbol = "MSFT", qty = "1" }, "get_stock_bars"),
+            crypto_only)
+        assert.is_false(blocked)
+    end)
+
+end)
+
     -- ---------------------------------------------------------------------------
     -- symbol_order_cooldown rule
     -- ---------------------------------------------------------------------------

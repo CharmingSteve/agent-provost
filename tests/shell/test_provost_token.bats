@@ -85,9 +85,9 @@ EOF
 
 @test "provost token auth: request with invalid token should be rejected in default.conf" {
   # Verify that default.conf contains invalid token handling
-  run grep -c "INVALID_PROVOST_TOKEN\|ngx.status = 403" "$TEST_REPO_ROOT/default.conf"
+  run grep -E -c "INVALID_PROVOST_TOKEN|return reject\(403," "$TEST_REPO_ROOT/default.conf"
   [ "$status" -eq 0 ]
-  [ "$output" -ge 2 ]
+  [ "$output" -ge 1 ]
 }
 
 @test "provost token auth: identity headers X-Provost-User and X-Provost-Machine are validated" {

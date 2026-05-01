@@ -56,9 +56,16 @@ describe("audit_error module", function()
   end)
 
   it("parses audit error JSON when nginx suffix text follows the payload", function()
-    local sample = [[
-2026/04/23 14:54:06 [error] 7#7: *38 [lua] audit_error.lua:92: emit(): PROVOST_AUDIT_ERROR {"provost_machine":"YOUR-MACHINE-NAME","status":"401","log_type":"error","provost_request_id":"check-err-123","error_detail":"","date":"2026-04-23 14:54:06","time_local":"23/Apr/2026:14:54:06 +0000","remote_addr":"173.194.76.188","request":"POST /mcp HTTP/1.1","request_body":"","resp_body":"","error_code":"MISSING_PROVOST_TOKEN","stream_tag":"provost_mcp_to_llm_error","provost_user":"your.email@domain.com"}, client: 173.194.76.188, server: localhost, request: \"POST /mcp HTTP/1.1\", host: \"localhost:8088\""
-    ]]
+    local sample = table.concat({
+      [[2026/04/23 14:54:06 [error] 7#7: *38 [lua] audit_error.lua:92: emit(): PROVOST_AUDIT_ERROR {]],
+      [["provost_machine":"YOUR-MACHINE-NAME","status":"401","log_type":"error",]],
+      [["provost_request_id":"check-err-123","error_detail":"","date":"2026-04-23 14:54:06",]],
+      [["time_local":"23/Apr/2026:14:54:06 +0000","remote_addr":"173.194.76.188",]],
+      [["request":"POST /mcp HTTP/1.1","request_body":"","resp_body":"",]],
+      [["error_code":"MISSING_PROVOST_TOKEN","stream_tag":"provost_mcp_to_llm_error",]],
+      [["provost_user":"your.email@domain.com"}, client: 173.194.76.188, server: localhost, ]],
+      [[request: \"POST /mcp HTTP/1.1\", host: \"localhost:8088\""]]
+    })
 
     local audit_json = sample:match("PROVOST_AUDIT_ERROR (%b{})")
 

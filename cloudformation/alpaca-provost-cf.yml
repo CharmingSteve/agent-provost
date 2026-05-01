@@ -100,8 +100,10 @@ Parameters:
 
   AllowedAssetClasses:
     Type: String
-    Default: "us_equity"
-    Description: "Comma-separated list of allowed asset classes"
+    Default: "us_equity,crypto,us_option"
+    AllowedPattern: '^\s*(us_equity|crypto|us_option)\s*(,\s*(us_equity|crypto|us_option)\s*)*$'
+    ConstraintDescription: "Use comma-separated values from: us_equity, crypto, us_option"
+    Description: "Comma-separated list of allowed asset classes (valid: us_equity, crypto, us_option)"
 
   # ── Log storage ───────────────────────────────────────────────────────────
   EnableObjectLock:

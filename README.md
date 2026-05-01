@@ -288,6 +288,21 @@ The sovereign mock harness is not included in this branch. Use the separate demo
 
 ---
 
+## AWS CloudTrail and CloudWatch — Deployment Security Note
+
+When you deploy Agent Provost using the CloudFormation template, you supply your Alpaca API key, Alpaca secret key, and Provost token as stack parameters. Those parameters are marked `NoEcho: true`, which prevents them from being displayed in the CloudFormation console and most AWS tooling surfaces.
+
+However, `NoEcho` is not a complete guarantee that the values are invisible to all AWS logging paths:
+
+- **CloudTrail management events** — if your account has CloudTrail enabled with broad management-event capture, the `CreateStack` / `UpdateStack` API calls can appear in trail logs. AWS does redact `NoEcho` parameter values from CloudTrail records in most regions and configurations, but this is an AWS behaviour you should verify for your own account and organisational policies.
+- **CloudFormation resource creation** — the template constructs a Secrets Manager secret directly from the parameter values at stack-creation time. That means the plaintext values briefly exist inside the CloudFormation service's processing layer before being written to Secrets Manager.
+- **CloudWatch Logs (EC2 startup)** — if you or your customers have CloudWatch Logs agents collecting `/var/log/cloud-init-output.log` or journal output, and the instance bootstrap script ever echoes variable content to stdout or stderr, those values could land in a log stream. The current `bootstrap.sh` does **not** print secret values, but you should confirm this for your specific AMI and any custom UserData you add.
+
+
+**Get in touch** — if you are evaluating Agent Provost for a regulated environment and have questions about this tradeoff, the deployment model, or custom hardening for your org, I am happy to help. Open a GitHub Issue or start a Discussion in this repository and I will respond directly.
+
+---
+
 *Agent Provost is an open-source project aimed at making autonomous finance safer for everyone. If you find this useful, please **Star** the repository and contribute your safety logic ideas!*
 
 Temporary validation line for version bump workflow.
