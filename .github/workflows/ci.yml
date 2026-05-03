@@ -200,8 +200,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set short commit tag for alpaca image
-        run: echo "ALPACA_IMAGE_TAG=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
+      - name: Set local trivy build tag for alpaca image
+        run: echo "TRIVY_BUILD_TAG=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
       - name: Load image versions from .env.versions
         run: grep -v '^#' .env.versions | grep -v '^$' >> "$GITHUB_ENV"
       - name: Stage dummy secrets for compose parsing
@@ -235,7 +235,7 @@ jobs:
           set -euo pipefail
           docker compose --env-file .env.versions -f docker-compose.yml pull agent-provost
           docker pull "${FLUENT_BIT_IMAGE}"
-          docker build -f alpaca-mcp.Dockerfile --build-arg BASE_PYTHON_IMAGE="${BASE_PYTHON_IMAGE}" -t agent-provost-alpaca-mcp:"${ALPACA_IMAGE_TAG}" .
+          docker build -f alpaca-mcp.Dockerfile --build-arg BASE_PYTHON_IMAGE="${BASE_PYTHON_IMAGE}" -t agent-provost-alpaca-mcp:"${TRIVY_BUILD_TAG}" .
       - name: Trivy image scan (agent-provost)
         run: |
           set +e
@@ -249,14 +249,14 @@ jobs:
       - name: Trivy image scan (alpaca-mcp build output)
         run: |
           set +e
-          docker image inspect "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}" >/dev/null
-          trivy image --exit-code 1 --severity CRITICAL,HIGH "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}" > /tmp/trivy-alpaca-mcp.txt 2>&1
+          docker image inspect "agent-provost-alpaca-mcp:${TRIVY_BUILD_TAG}" >/dev/null
+          trivy image --exit-code 1 --severity CRITICAL,HIGH "agent-provost-alpaca-mcp:${TRIVY_BUILD_TAG}" > /tmp/trivy-alpaca-mcp.txt 2>&1
           trivy_alpaca_status=$?
           cat /tmp/trivy-alpaca-mcp.txt
           echo "TRIVY_ALPACA_MCP_STATUS=${trivy_alpaca_status}" >> "$GITHUB_ENV"
           TRIVY_ALPACA_MCP_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]{4,}" /tmp/trivy-alpaca-mcp.txt | sort -u | paste -sd, -)"
           echo "TRIVY_ALPACA_MCP_CVES=${TRIVY_ALPACA_MCP_CVES:-none-found}" >> "$GITHUB_ENV"
-          trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-alpaca-mcp.json "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}" >/dev/null 2>&1 || true
+          trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-alpaca-mcp.json "agent-provost-alpaca-mcp:${TRIVY_BUILD_TAG}" >/dev/null 2>&1 || true
       - name: Trivy image scan (fluent-bit)
         run: |
           set +e
@@ -286,7 +286,7 @@ jobs:
           fi
           if [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
             failed=1
-            echo "::error title=Trivy scan failed::Image agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG} has HIGH/CRITICAL CVEs: ${TRIVY_ALPACA_MCP_CVES:-unavailable}"
+            echo "::error title=Trivy scan failed::Image agent-provost-alpaca-mcp:${TRIVY_BUILD_TAG} has HIGH/CRITICAL CVEs: ${TRIVY_ALPACA_MCP_CVES:-unavailable}"
             if [ -f /tmp/trivy-alpaca-mcp.json ]; then
               jq -r "$JQ_CVE" /tmp/trivy-alpaca-mcp.json 2>/dev/null || true
             fi
@@ -494,15 +494,33 @@ jobs:
         if: env.IMAGE_CHANGED == 'true'
         run: |
           set -euo pipefail
-          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' public.ecr.aws/e2u9m9o7/agent-provost:"${IMAGE_SHA_TAG}")
-          DIGEST_HASH="${DIGEST#*@}"
-          CURRENT_TAG=$(grep '^ALPACA_IMAGE_TAG=' .env.versions | cut -d= -f2 | cut -d@ -f1)
-          sed -i "s|^ALPACA_IMAGE_TAG=.*|ALPACA_IMAGE_TAG=${CURRENT_TAG}@${DIGEST_HASH}|" .env.versions
+          REPOSITORY_NAME="${ALPACA_IMAGE##*/}"
+          ECR_DIGEST=""
+          for attempt in $(seq 1 12); do
+            ECR_DIGEST="$(aws ecr-public describe-images \
+              --region us-east-1 \
+              --repository-name "${REPOSITORY_NAME}" \
+              --image-ids imageTag="${IMAGE_SHA_TAG}" \
+              --query 'imageDetails[0].imageDigest' \
+              --output text 2>/dev/null || true)"
+            if echo "${ECR_DIGEST}" | grep -Eq '^sha256:[a-f0-9]{64}$'; then
+              break
+            fi
+            echo "Digest not yet available for ${REPOSITORY_NAME}:${IMAGE_SHA_TAG} (attempt ${attempt}/12)"
+            sleep 5
+          done
+
+          if ! echo "${ECR_DIGEST}" | grep -Eq '^sha256:[a-f0-9]{64}$'; then
+            echo "::error::Failed to resolve ECR digest for ${REPOSITORY_NAME}:${IMAGE_SHA_TAG}"
+            exit 1
+          fi
+
+          sed -i "s|^ALPACA_IMAGE_TAG=.*|ALPACA_IMAGE_TAG=${ECR_DIGEST}|" .env.versions
       - name: Step 4c (Commit pinned digest back to branch)
         if: env.IMAGE_CHANGED == 'true'
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "ci: pin ALPACA_IMAGE_TAG to immutable digest [skip ci]"
+          commit_message: "ci: pin ALPACA_IMAGE_TAG to ECR digest [skip ci]"
           file_pattern: .env.versions
       - name: Step 5 (Sanity/Integration Tests)
         if: env.IMAGE_CHANGED == 'true'

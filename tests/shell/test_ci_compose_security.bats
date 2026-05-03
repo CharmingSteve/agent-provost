@@ -133,11 +133,11 @@
 }
 
 @test "CI scans built alpaca-mcp image" {
-  run grep -E 'ALPACA_IMAGE_TAG=\$\(git rev-parse --short=7 HEAD\)' .github/workflows/ci.yml
+  run grep -E 'TRIVY_BUILD_TAG=\$\(git rev-parse --short=7 HEAD\)' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E 'docker image inspect "agent-provost-alpaca-mcp:\$\{ALPACA_IMAGE_TAG\}" >/dev/null' .github/workflows/ci.yml
+  run grep -E 'docker image inspect "agent-provost-alpaca-mcp:\$\{TRIVY_BUILD_TAG\}" >/dev/null' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH "agent-provost-alpaca-mcp:\$\{ALPACA_IMAGE_TAG\}"' .github/workflows/ci.yml
+  run grep -E 'trivy image --exit-code 1 --severity CRITICAL,HIGH "agent-provost-alpaca-mcp:\$\{TRIVY_BUILD_TAG\}"' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 
@@ -211,7 +211,12 @@
 }
 
 @test "docker-compose.yml uses ALPACA_IMAGE for alpaca-mcp" {
-  run grep -E 'image:\s*\$\{ALPACA_IMAGE\}:\$\{ALPACA_IMAGE_TAG:-latest\}' docker-compose.yml
+  run grep -E 'image:\s*\$\{ALPACA_IMAGE\}@\$\{ALPACA_IMAGE_TAG\}' docker-compose.yml
+  [ "$status" -eq 0 ]
+}
+
+@test ".env.versions pins ALPACA_IMAGE_TAG by digest" {
+  run grep -E '^ALPACA_IMAGE_TAG=sha256:[a-f0-9]{64}$' .env.versions
   [ "$status" -eq 0 ]
 }
 

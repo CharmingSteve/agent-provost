@@ -1,6 +1,6 @@
 services:
   alpaca-mcp:
-    image: ${ALPACA_IMAGE}:${ALPACA_IMAGE_TAG:-latest}
+    image: ${ALPACA_IMAGE}@${ALPACA_IMAGE_TAG}
     pull_policy: if_not_present
     container_name: alpaca-mcp
     volumes:
