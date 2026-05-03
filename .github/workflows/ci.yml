@@ -494,8 +494,16 @@ jobs:
         if: env.IMAGE_CHANGED == 'true'
         run: |
           set -euo pipefail
-          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' public.ecr.aws/e2u9m9o7/agent-provost:"${IMAGE_SHA_TAG}")
-          DIGEST_HASH="${DIGEST#*@}"
+          DIGEST_HASH=$(aws ecr-public describe-images \
+            --region us-east-1 \
+            --repository-name agent-provost \
+            --image-ids imageTag="${IMAGE_SHA_TAG}" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)
+          if [ -z "${DIGEST_HASH}" ] || [ "${DIGEST_HASH}" = "None" ] || [ "${DIGEST_HASH}" = "null" ]; then
+            echo "::error::Failed to resolve authoritative digest for public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}"
+            exit 1
+          fi
           CURRENT_TAG=$(grep '^ALPACA_IMAGE_TAG=' .env.versions | cut -d= -f2 | cut -d@ -f1)
           sed -i "s|^ALPACA_IMAGE_TAG=.*|ALPACA_IMAGE_TAG=${CURRENT_TAG}@${DIGEST_HASH}|" .env.versions
       - name: Step 4c (Commit pinned digest back to branch)

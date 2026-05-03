@@ -24,7 +24,13 @@ TZ="$(aws ec2 describe-tags \
   --output text 2>/dev/null || echo '')"
 
 if [[ -n "${TZ}" && "${TZ}" != "None" ]]; then
-  sudo timedatectl set-timezone "${TZ}"
+  if ! command -v timedatectl >/dev/null 2>&1; then
+    echo "Warning: timedatectl is not available; skipping timezone update" >&2
+  elif ! timedatectl list-timezones 2>/dev/null | grep -Fxq -- "${TZ}"; then
+    echo "Warning: invalid ProvostTimezone tag value '${TZ}'; skipping timezone update" >&2
+  elif ! sudo timedatectl set-timezone "${TZ}"; then
+    echo "Warning: failed to set timezone to '${TZ}'; continuing" >&2
+  fi
 fi
 
 SECRET_NAME="agent-provost-secret-${STACK_NAME}"
