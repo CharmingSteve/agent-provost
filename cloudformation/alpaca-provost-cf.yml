@@ -105,6 +105,29 @@ Parameters:
     ConstraintDescription: "Use comma-separated values from: us_equity, crypto, us_option"
     Description: "Comma-separated list of allowed asset classes (valid: us_equity, crypto, us_option)"
 
+  # ── Timezone ──────────────────────────────────────────────────────────────
+  Timezone:
+    Type: String
+    Default: 'UTC'
+    Description: >
+      IANA timezone name (e.g. UTC, America/New_York, Asia/Jerusalem).
+      Applied at boot via timedatectl so S3 log timestamps match local time.
+
+  # ── SSH Access (optional) ─────────────────────────────────────────────────
+  KeyName:
+    Type: String
+    Default: ''
+    Description: >
+      Name of an existing EC2 KeyPair to enable SSH access to the instance.
+      Leave blank to disable SSH access entirely.
+
+  SSHLocation:
+    Type: String
+    Default: ''
+    Description: >
+      CIDR IP range permitted to reach port 22 (e.g. 1.2.3.4/32).
+      Only used when KeyName is provided. Leave blank to disable SSH.
+
   # ── Log storage ───────────────────────────────────────────────────────────
   EnableObjectLock:
     Type: String
@@ -136,6 +159,11 @@ Parameters:
 Conditions:
   ObjectLockEnabledCondition: !Equals [!Ref EnableObjectLock, 'Yes']
   AssignPublicIpCondition: !Equals [!Ref AssignPublicIp, 'true']
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+  HasSSHLocation: !Not [!Equals [!Ref SSHLocation, '']]
+  EnableSSH: !And
+    - !Condition HasKeyName
+    - !Condition HasSSHLocation
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Metadata – AWS Marketplace / CloudFormation console UX grouping
@@ -177,6 +205,12 @@ Metadata:
         Parameters:
           - EnableObjectLock
           - ObjectLockRetentionDays
+      - Label:
+          default: "Instance Settings"
+        Parameters:
+          - Timezone
+          - KeyName
+          - SSHLocation
     ParameterLabels:
       ImageId:
         default: "Agent Provost AMI ID"
@@ -317,6 +351,14 @@ Resources:
           ToPort: 8088
           CidrIp: 0.0.0.0/0
           Description: "Agent Provost proxy HTTPS port"
+        - !If
+          - EnableSSH
+          - IpProtocol: tcp
+            FromPort: 22
+            ToPort: 22
+            CidrIp: !Ref SSHLocation
+            Description: "SSH access (restricted to SSHLocation CIDR)"
+          - !Ref AWS::NoValue
       SecurityGroupEgress:
         - IpProtocol: "-1"
           CidrIp: 0.0.0.0/0
@@ -336,6 +378,7 @@ Resources:
       ImageId: !Ref ImageId
       InstanceType: !Ref InstanceType
       IamInstanceProfile: !Ref InstanceProfile
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref AWS::NoValue]
       NetworkInterfaces:
         - DeviceIndex: 0
           SubnetId: !Ref SubnetId
@@ -361,6 +404,8 @@ Resources:
           Value: agent-provost
         - Key: ManagedBy
           Value: cloudformation
+        - Key: ProvostTimezone
+          Value: !Ref Timezone
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Outputs

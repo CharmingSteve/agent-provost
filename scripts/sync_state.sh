@@ -17,6 +17,16 @@ if [[ -z "${STACK_NAME}" || "${STACK_NAME}" == "None" ]]; then
   exit 1
 fi
 
+TZ="$(aws ec2 describe-tags \
+  --region "${REGION}" \
+  --filters "Name=resource-id,Values=${INSTANCE_ID}" "Name=key,Values=ProvostTimezone" \
+  --query 'Tags[0].Value' \
+  --output text 2>/dev/null || echo '')"
+
+if [[ -n "${TZ}" && "${TZ}" != "None" ]]; then
+  sudo timedatectl set-timezone "${TZ}"
+fi
+
 SECRET_NAME="agent-provost-secret-${STACK_NAME}"
 SECRET_STRING="$(aws secretsmanager get-secret-value \
   --region "${REGION}" \

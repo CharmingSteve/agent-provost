@@ -402,7 +402,7 @@ jobs:
     name: Build -> Secure -> Push -> Test (ECR Public)
     runs-on: ubuntu-24.04-arm
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -490,6 +490,20 @@ jobs:
           set -euo pipefail
           docker push public.ecr.aws/e2u9m9o7/agent-provost:latest
           docker push public.ecr.aws/e2u9m9o7/agent-provost:"${IMAGE_SHA_TAG}"
+      - name: Step 4b (Pin immutable digest in .env.versions)
+        if: env.IMAGE_CHANGED == 'true'
+        run: |
+          set -euo pipefail
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' public.ecr.aws/e2u9m9o7/agent-provost:"${IMAGE_SHA_TAG}")
+          DIGEST_HASH="${DIGEST#*@}"
+          CURRENT_TAG=$(grep '^ALPACA_IMAGE_TAG=' .env.versions | cut -d= -f2 | cut -d@ -f1)
+          sed -i "s|^ALPACA_IMAGE_TAG=.*|ALPACA_IMAGE_TAG=${CURRENT_TAG}@${DIGEST_HASH}|" .env.versions
+      - name: Step 4c (Commit pinned digest back to branch)
+        if: env.IMAGE_CHANGED == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "ci: pin ALPACA_IMAGE_TAG to immutable digest [skip ci]"
+          file_pattern: .env.versions
       - name: Step 5 (Sanity/Integration Tests)
         if: env.IMAGE_CHANGED == 'true'
         run: |
