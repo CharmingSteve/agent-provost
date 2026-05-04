@@ -1,4 +1,5 @@
 local cjson = require("cjson.safe")
+local logger = require "resty.logger.socket"
 
 local _M = {}
 
@@ -89,7 +90,22 @@ function _M.emit(tag, status_code, error_code, error_detail, opts)
         log_type = "error"
     }
 
-    ngx.log(ngx.ERR, "PROVOST_AUDIT_ERROR ", encode_or_fallback(payload))
+    if not logger.initted() then
+        local ok, err = logger.init{
+            host = 'fluent-bit',
+            port = 5140,
+            flush_limit = 4096,
+            drop_limit = 1048576,
+        }
+        if not ok then
+            ngx.log(ngx.ERR, "failed to initialize logger: ", err)
+        end
+    end
+
+    local bytes, err = logger.log("PROVOST_AUDIT_ERROR " .. encode_or_fallback(payload) .. "\n")
+    if err then
+        ngx.log(ngx.ERR, "failed to log message via socket: ", err)
+    end
 end
 
 return _M

@@ -36,6 +36,15 @@ describe("audit_error module", function()
         _G.__last_log = table.concat({ ... }, "")
       end
     }
+    -- Mock resty.logger.socket so audit_error can be required outside OpenResty
+    package.loaded["resty.logger.socket"] = {
+      initted = function() return true end,
+      init = function() return true, nil end,
+      log = function(msg)
+        _G.__last_log = msg
+        return #msg, nil
+      end,
+    }
     package.loaded["audit_error"] = nil
   end)
 
@@ -43,6 +52,7 @@ describe("audit_error module", function()
     package.path = original_package_path
     _G.ngx = original_ngx
     _G.__last_log = nil
+    package.loaded["resty.logger.socket"] = nil
   end)
 
   it("emits PROVOST_AUDIT_ERROR JSON with request identity fields", function()
