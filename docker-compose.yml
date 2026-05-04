@@ -6,7 +6,7 @@ services:
     volumes:
       - ./entrypoint.sh:/entrypoint.sh:ro
       - ${PROVOST_SECRETS_DIR:-./.secrets}:/run/secrets:ro
-      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     environment:
       TRADE_API_URL: "http://agent-provost:8081/trading"
@@ -14,6 +14,7 @@ services:
       BROKER_API_URL: "http://agent-provost:8081/broker"
       ALPACA_API_KEY: ${ALPACA_API_KEY:-}
       ALPACA_SECRET_KEY: ${ALPACA_SECRET_KEY:-}
+      TZ: ${TZ:-Asia/Jerusalem}
     expose:
       - "8088"
     networks:
@@ -37,7 +38,7 @@ services:
       - ./fluent-bit:/fluent-bit/etc:ro
       - provost_run:/var/run/provost
       - ./logs/fluent-bit-storage:/var/log/fluent-bit/storage
-      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
     environment:
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
@@ -45,6 +46,7 @@ services:
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
       S3_BUCKET: ${S3_BUCKET:-agent-provost-local}
       INSTANCE_ID: ${INSTANCE_ID:-local-dev}
+      TZ: ${TZ:-Asia/Jerusalem}
     healthcheck:
       test: ["CMD", "/fluent-bit/bin/fluent-bit", "--version"]
       interval: 5s
@@ -83,7 +85,9 @@ services:
       - ./rules.json:/etc/rules.json:ro
       - ${PROVOST_SECRETS_DIR:-./.secrets}:/run/secrets:ro
       - provost_run:/var/run/provost
-      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      TZ: ${TZ:-Asia/Jerusalem}
     networks:
       - mcp_internal
       - proxy_egress
