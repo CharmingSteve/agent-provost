@@ -130,6 +130,13 @@ Parameters:
       CIDR IP range permitted to reach port 22 (e.g. 1.2.3.4/32).
       Only used when KeyName is provided. Leave blank to disable SSH.
 
+  ForceReplacementToken:
+    Type: String
+    Default: '1'
+    Description: >
+      Change this value (e.g., 1 to 2) to force CloudFormation to terminate 
+      the current EC2 instance and launch a brand new one.
+
   # ── Log storage ───────────────────────────────────────────────────────────
   EnableObjectLock:
     Type: String
@@ -213,6 +220,7 @@ Metadata:
           - Timezone
           - KeyName
           - SSHLocation
+          - ForceReplacementToken
     ParameterLabels:
       ImageId:
         default: "Agent Provost AMI ID"
@@ -246,6 +254,8 @@ Metadata:
         default: "Lock audit logs in S3? (Yes / No)"
       ObjectLockRetentionDays:
         default: "Log retention period (days, 1-3650)"
+      ForceReplacementToken:
+        default: "Force Instance Replacement Token"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Resources
@@ -399,6 +409,7 @@ Resources:
           #!/bin/bash
           set -e
           # Runtime boot orchestration is baked into the AMI per-boot script.
+          # ForceReplacementToken: ${ForceReplacementToken}
       Tags:
         - Key: Name
           Value: !Sub "agent-provost-${AWS::StackName}"
