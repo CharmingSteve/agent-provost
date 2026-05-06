@@ -124,6 +124,15 @@ Parameters:
       CIDR IP range permitted to reach port 22 (e.g. 1.2.3.4/32).
       Only used when KeyName is provided. Leave blank to disable SSH.
 
+  MCPAccessLocation:
+    Type: String
+    Default: '0.0.0.0/0'
+    AllowedPattern: '^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/(3[0-2]|[12]?[0-9])$'
+    ConstraintDescription: Must be a valid IPv4 CIDR range such as 0.0.0.0/0 or 1.2.3.4/32.
+    Description: >
+      CIDR IP range permitted to reach port 8088 for MCP/proxy access
+      (e.g. 1.2.3.4/32). Use 0.0.0.0/0 to allow from anywhere.
+
   ForceReplacementToken:
     Type: String
     Default: '1'
@@ -211,6 +220,7 @@ Metadata:
           default: "Instance Settings"
         Parameters:
           - Timezone
+          - MCPAccessLocation
           - KeyName
           - SSHLocation
           - ForceReplacementToken
@@ -223,6 +233,8 @@ Metadata:
         default: "Assign Public IP"
       InstanceType:
         default: "Instance Type"
+      MCPAccessLocation:
+        default: "MCP Access CIDR (Port 8088)"
       AlpacaApiKey:
         default: "Alpaca API Key"
       AlpacaSecretKey:
@@ -462,7 +474,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 8088
           ToPort: 8088
-          CidrIp: 0.0.0.0/0
+          CidrIp: !Ref MCPAccessLocation
           Description: "Agent Provost proxy HTTPS port"
         - !If
           - EnableSSH
