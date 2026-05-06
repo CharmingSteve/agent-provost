@@ -179,7 +179,7 @@ jobs:
       - name: Generate Traffic and Validate Final Fluent Bit JSON Schemas
         run: |
           set -euo pipefail
-          
+          sleep 10 # Wait for services to be fully ready
           echo "=== Generating Dummy Traffic ==="
           # Hit the proxy to generate an access log
           curl -s http://localhost:8088/ > /dev/null || true
