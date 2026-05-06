@@ -21,12 +21,6 @@ Parameters:
     Type: AWS::EC2::VPC::Id
     Description: ID of the existing VPC in which to launch the instance.
 
-  SubnetId:
-    Type: AWS::EC2::Subnet::Id
-    Description: >
-      ID of the existing subnet (public or private with NAT) in which to
-      launch the instance.
-
   AssignPublicIp:
     Type: String
     Default: 'true'
@@ -192,7 +186,6 @@ Metadata:
           default: "Networking"
         Parameters:
           - VpcId
-          - SubnetId
           - AssignPublicIp
       - Label:
           default: "Secrets & Configuration"
@@ -226,8 +219,6 @@ Metadata:
         default: "Agent Provost AMI ID"
       VpcId:
         default: "VPC"
-      SubnetId:
-        default: "Subnet"
       AssignPublicIp:
         default: "Assign Public IP"
       InstanceType:
@@ -280,7 +271,7 @@ Resources:
   LogsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "agent-provost-logs-${AWS::AccountId}-${AWS::Region}-${AWS::StackName}"
+      BucketName: !Sub "ap-logs-${AWS::AccountId}-${AWS::Region}-${AWS::StackName}"
       ObjectLockEnabled: !If [ObjectLockEnabledCondition, true, false]
       VersioningConfiguration:
         Status: Enabled
@@ -351,7 +342,117 @@ Resources:
       Roles:
         - !Ref InstanceRole
 
-  # ── 4. Security Group ──────────────────────────────────────────────────────
+  # ── 4. Lambda IAM Role (subnet lookup custom resource) ────────────────────
+  SubnetLookupLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "agent-provost-subnet-lookup-role-${AWS::StackName}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SubnetLookupPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: DescribeInstanceTypeOfferings
+                Effect: Allow
+                Action: ec2:DescribeInstanceTypeOfferings
+                Resource: "*"
+              - Sid: DescribeSubnets
+                Effect: Allow
+                Action: ec2:DescribeSubnets
+                Resource: "*"
+      Tags:
+        - Key: Project
+          Value: agent-provost
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ── 4a. Lambda Log Group ────────────────────────────────────────────────────
+  SubnetLookupLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/agent-provost-subnet-lookup-${AWS::StackName}"
+      RetentionInDays: 1
+
+  # ── 4b. Lambda Function (subnet lookup) ───────────────────────────────────
+  SubnetLookupFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: SubnetLookupLogGroup
+    Properties:
+      FunctionName: !Sub "agent-provost-subnet-lookup-${AWS::StackName}"
+      Handler: index.handler
+      Role: !GetAtt SubnetLookupLambdaRole.Arn
+      Runtime: python3.12
+      Timeout: 30
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import logging
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def handler(event, context):
+              logger.info("Event: %s", event)
+              if event['RequestType'] == 'Delete':
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                  return
+              try:
+                  vpc_id = event['ResourceProperties']['VpcId']
+                  instance_type = event['ResourceProperties']['InstanceType']
+                  ec2 = boto3.client('ec2')
+
+                  # Find AZs that support the instance type in this region
+                  offerings = ec2.describe_instance_type_offerings(
+                      LocationType='availability-zone',
+                      Filters=[{'Name': 'instance-type', 'Values': [instance_type]}]
+                  )
+                  supported_azs = {o['Location'] for o in offerings['InstanceTypeOfferings']}
+                  logger.info("Supported AZs for %s: %s", instance_type, supported_azs)
+
+                  if not supported_azs:
+                      raise ValueError(f"No AZs support instance type {instance_type}")
+
+                  # Find subnets in the VPC that are in a supported AZ
+                  subnets_resp = ec2.describe_subnets(
+                      Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}]
+                  )
+                  for subnet in subnets_resp['Subnets']:
+                      if subnet['AvailabilityZone'] in supported_azs:
+                          subnet_id = subnet['SubnetId']
+                          logger.info("Selected SubnetId: %s (AZ: %s)", subnet_id, subnet['AvailabilityZone'])
+                          cfnresponse.send(event, context, cfnresponse.SUCCESS,
+                                           {'SubnetId': subnet_id}, subnet_id)
+                          return
+
+                  raise ValueError(f"No subnet in VPC {vpc_id} found in a supported AZ for {instance_type}")
+              except Exception as e:
+                  logger.error("Error: %s", str(e))
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+      Tags:
+        - Key: Project
+          Value: agent-provost
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ── 4c. Custom Resource – invoke subnet lookup ─────────────────────────────
+  SubnetLookup:
+    Type: Custom::SubnetLookup
+    Properties:
+      ServiceToken: !GetAtt SubnetLookupFunction.Arn
+      VpcId: !Ref VpcId
+      InstanceType: !Ref InstanceType
+
+  # ── 5. Security Group ──────────────────────────────────────────────────────
   InstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -393,7 +494,7 @@ Resources:
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref AWS::NoValue]
       NetworkInterfaces:
         - DeviceIndex: 0
-          SubnetId: !Ref SubnetId
+          SubnetId: !GetAtt SubnetLookup.SubnetId
           GroupSet:
             - !GetAtt InstanceSecurityGroup.GroupId
           AssociatePublicIpAddress: !If [AssignPublicIpCondition, true, false]
