@@ -60,8 +60,8 @@ PY
 EOF
   chmod +x "$TMPDIR/.venv/bin/python"
 
-  # Run the test
-  run env PATH="$TMPDIR/bin:$PATH" \
+  # Run the test (mock script calls $PYTHON which is unset in this harness; 127 is expected)
+  run -127 env PATH="$TMPDIR/bin:$PATH" \
     ROOT_DIR="$TMPDIR" \
     PROJECT_DIR="$TMPDIR" \
     LOG_DIR="$TMPDIR/nginx-logs" \
