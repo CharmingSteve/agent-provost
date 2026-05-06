@@ -114,14 +114,14 @@
   [ "$status" -ne 0 ]
 }
 
-@test "CI validates final Fluent Bit JSON output using check-jsonschema" {
-  run grep -E "check-jsonschema" .github/workflows/ci.yml
+@test "CI runs always-on Fluent Bit schema validation against emitted logs" {
+  run grep -E 'python3 -m venv /tmp/check-jsonschema-venv' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E "\-\-jsonlines" .github/workflows/ci.yml
+  run grep -E 'sh scripts/validate_fluent_bit_json\.sh' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E "schemas/access_log_schema\.json" .github/workflows/ci.yml
+  run grep -E 'compose-smoke:' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
-  run grep -E "schemas/error_log_schema\.json" .github/workflows/ci.yml
+  run grep -E 'integration-tests:' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 

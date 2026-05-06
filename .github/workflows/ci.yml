@@ -87,8 +87,13 @@ jobs:
     needs: [lint-shell]
     steps:
       - uses: actions/checkout@v4
-      - name: Install bats
-        run: sudo apt-get install -y bats
+      - name: Install bats and check-jsonschema
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y bats python3-venv
+          python3 -m venv /tmp/check-jsonschema-venv
+          /tmp/check-jsonschema-venv/bin/pip install --quiet check-jsonschema
+          echo "/tmp/check-jsonschema-venv/bin" >> "$GITHUB_PATH"
       - name: Run bats tests
         run: bats tests/shell/
 
@@ -167,6 +172,14 @@ jobs:
           [ "$(docker inspect -f '{{.State.Status}}' alpaca-mcp)" = "running" ]
           [ "$(docker inspect -f '{{.State.Status}}' agent-provost)" = "running" ]
           [ "$(docker inspect -f '{{.State.Health.Status}}' fluent-bit)" = "healthy" ]
+      - name: Validate final Fluent Bit JSON schemas from compose smoke traffic
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y python3-venv
+          python3 -m venv /tmp/check-jsonschema-venv
+          /tmp/check-jsonschema-venv/bin/pip install --quiet check-jsonschema
+          PATH="/tmp/check-jsonschema-venv/bin:$PATH" sh scripts/validate_fluent_bit_json.sh
       - name: Tear down compose stack
         if: always()
         run: docker compose --env-file .env.versions down -v --remove-orphans
@@ -366,13 +379,12 @@ jobs:
         run: docker exec agent-provost nginx -t
       - name: Validate Final Fluent Bit JSON Schemas
         run: |
-          pip install check-jsonschema
-          
-          echo "Validating Access Logs..."
-          find logs/fluent-bit-storage -type f -name "*access*" -exec check-jsonschema --schemafile schemas/access_log_schema.json --jsonlines {} +
-          
-          echo "Validating Error Logs..."
-          find logs/fluent-bit-storage -type f -name "*error*" -exec check-jsonschema --schemafile schemas/error_log_schema.json --jsonlines {} +
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y python3-venv
+          python3 -m venv /tmp/check-jsonschema-venv
+          /tmp/check-jsonschema-venv/bin/pip install --quiet check-jsonschema
+          PATH="/tmp/check-jsonschema-venv/bin:$PATH" sh scripts/validate_fluent_bit_json.sh
 
   # ── Build → Secure → Push → Test (ECR Public) ─────────────────────────────
   build-secure-push-test:
