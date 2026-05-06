@@ -145,7 +145,7 @@ jobs:
           eval "$(sh bootstrap.sh runner)"
       - name: Ensure local dirs for bind mounts
         run: |
-          mkdir -p logs/fluent-bit-storage
+          mkdir -p logs/fluent-bit-storage/final
           chmod -R a+rwx logs/fluent-bit-storage
       - name: Bring up compose stack
         run: |
