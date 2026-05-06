@@ -85,6 +85,7 @@ function _M.emit(tag, status_code, error_code, error_detail, opts)
     -- Fields ordered to match access log cosmetic order (time_local first).
     local fields = {
         {"time_local",          ngx.var.time_local or ""},
+        {"test_rogue_field",    "I should break the CI"},
         {"remote_addr",         ngx.var.remote_addr or ""},
         {"request",             ngx.var.request or ""},
         {"status",              tostring(status_code or ngx.status or "")},
