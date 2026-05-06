@@ -172,14 +172,39 @@ jobs:
           [ "$(docker inspect -f '{{.State.Status}}' alpaca-mcp)" = "running" ]
           [ "$(docker inspect -f '{{.State.Status}}' agent-provost)" = "running" ]
           [ "$(docker inspect -f '{{.State.Health.Status}}' fluent-bit)" = "healthy" ]
-      - name: Validate final Fluent Bit JSON schemas from compose smoke traffic
+      - name: Validate Final Fluent Bit JSON Schemas
         run: |
           set -euo pipefail
-          sudo apt-get update -q
-          sudo apt-get install -y python3-venv
-          python3 -m venv /tmp/check-jsonschema-venv
-          /tmp/check-jsonschema-venv/bin/pip install --quiet check-jsonschema
-          PATH="/tmp/check-jsonschema-venv/bin:$PATH" sh scripts/validate_fluent_bit_json.sh
+          
+          # Safely install check-jsonschema in a venv for Ubuntu 24.04
+          python3 -m venv /tmp/schema-venv
+          /tmp/schema-venv/bin/pip install --quiet check-jsonschema
+          export PATH="/tmp/schema-venv/bin:$PATH"
+          
+          # Wait a few seconds to ensure Fluent Bit has flushed to disk
+          sleep 5
+          
+          echo "=== Validating Access Logs ==="
+          ACCESS_LOGS=$(find logs/fluent-bit-storage -type f -name "*access*")
+          if [ -z "$ACCESS_LOGS" ]; then
+            echo "❌ ERROR: No access logs found! The test generated no traffic or the path is wrong."
+            exit 1
+          fi
+          for file in $ACCESS_LOGS; do
+            echo "Checking $file..."
+            check-jsonschema --schemafile schemas/access_log_schema.json --jsonlines "$file"
+          done
+          
+          echo "=== Validating Error Logs ==="
+          ERROR_LOGS=$(find logs/fluent-bit-storage -type f -name "*error*")
+          if [ -z "$ERROR_LOGS" ]; then
+            echo "❌ ERROR: No error logs found! The test generated no errors or the path is wrong."
+            exit 1
+          fi
+          for file in $ERROR_LOGS; do
+            echo "Checking $file..."
+            check-jsonschema --schemafile schemas/error_log_schema.json --jsonlines "$file"
+          done
       - name: Tear down compose stack
         if: always()
         run: docker compose --env-file .env.versions down -v --remove-orphans
