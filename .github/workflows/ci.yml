@@ -140,9 +140,9 @@ jobs:
     needs: [test-lua, test-shell, build-secure-push-test]
     steps:
       - uses: actions/checkout@v4
-      - name: Pull latest .env.versions
-        run: |
-          git pull origin ${{ github.ref }}
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
       - name: Stage dummy secrets for compose runtime
 
         run: |
@@ -215,10 +215,6 @@ jobs:
             echo "Checking $file..."
             check-jsonschema --schemafile schemas/error_log_schema.json --jsonlines "$file"
           done
-      - name: Pull latest .env.versions
-        run: |
-          git pull origin ${{ github.ref }}
-
       - name: Tear down compose stack
         if: always()
         run: docker compose --env-file .env.versions down -v --remove-orphans
@@ -401,6 +397,8 @@ jobs:
     if: ${{ needs.check-credentials.outputs.enabled == 'true' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
       - name: Install jq
         run: sudo apt-get install -y jq
       - name: Stage real secrets for integration tests
