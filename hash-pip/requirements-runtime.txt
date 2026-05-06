@@ -17,6 +17,7 @@ pip==26.1 \
 # Version represented by these hashes: 0.11.10
 # Upgraded from 0.11.7; fixes rustls-webpki GHSA-82j2-j2ch-gfr8 (HIGH) via bumped rustls-webpki 0.103.13
 uv==0.11.10 \
+    --hash=sha256:6d3892056347d3e2b7734df2fb194568599cc4b1bce36a99ade75c8458e4d1d0 \
     --hash=sha256:12ace874453eb3a80af4684f72719751127443be75d1422e4a068a5758142f1b \
     --hash=sha256:a16c1fced229b82403411378182e08a86f814a9f15a281e558cf2f0d02fc4c99 \
     --hash=sha256:700ef6a0504ea98592b7bebd1196ad2f4c84be834c913e3cbd4f1411a814b40b
