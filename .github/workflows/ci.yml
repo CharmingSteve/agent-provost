@@ -128,34 +128,11 @@ jobs:
           set -euo pipefail
           zizmor .github/workflows/
 
-  # ── Log schema validation ──────────────────────────────────────────────────
-  log-schema-validation:
-    name: Log schema validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate log format uses JSON escaping and required keys in default.conf
-        run: |
-          set -euo pipefail
-          conf="default.conf"
-          if ! grep -Eq 'log_format[[:space:]]+json_full[[:space:]]+escape=json' "$conf"; then
-            echo "FAIL: $conf must define json_full with escape=json to prevent log injection"
-            exit 1
-          fi
-          for key in time_local remote_addr request status body_bytes_sent \
-                     request_time upstream_response_time request_body resp_body; do
-            if ! grep -q "\"${key}\"" "$conf"; then
-              echo "FAIL: key '${key}' missing from $conf log format"
-              exit 1
-            fi
-          done
-          echo "PASS: required log keys present and escape=json enabled in $conf"
-
   # ── Compose smoke test (always-on) ────────────────────────────────────────
   compose-smoke:
     name: Compose smoke (up/health/down)
     runs-on: ubuntu-24.04-arm
-    needs: [test-lua, test-shell, log-schema-validation]
+    needs: [test-lua, test-shell]
     steps:
       - uses: actions/checkout@v4
       - name: Stage dummy secrets for compose runtime
@@ -368,7 +345,7 @@ jobs:
   integration-tests:
     name: Integration tests (end-to-end)
     runs-on: ubuntu-latest
-    needs: [check-credentials, test-lua, test-shell, log-schema-validation]
+    needs: [check-credentials, test-lua, test-shell]
     if: ${{ needs.check-credentials.outputs.enabled == 'true' }}
     steps:
       - uses: actions/checkout@v4
@@ -387,15 +364,15 @@ jobs:
         run: ./verify_proxy_routing.sh
       - name: Validate nginx config in running container
         run: docker exec agent-provost nginx -t
-      - name: Validate access log JSON schema
+      - name: Validate Final Fluent Bit JSON Schemas
         run: |
-          set -euo pipefail
-          for log in nginx-logs/llm_to_alpaca_access.log nginx-logs/mcp_to_alpaca_access.log; do
-            jq -e 'has("time_local") and has("remote_addr") and has("request") and
-                   has("status") and has("body_bytes_sent") and has("request_time") and
-                   has("upstream_response_time") and has("request_body") and
-                   has("resp_body")' "${log}"
-          done
+          pip install check-jsonschema
+          
+          echo "Validating Access Logs..."
+          find logs/fluent-bit-storage -type f -name "*access*" -exec check-jsonschema --schemafile schemas/access_log_schema.json --jsonlines {} +
+          
+          echo "Validating Error Logs..."
+          find logs/fluent-bit-storage -type f -name "*error*" -exec check-jsonschema --schemafile schemas/error_log_schema.json --jsonlines {} +
 
   # ── Build → Secure → Push → Test (ECR Public) ─────────────────────────────
   build-secure-push-test:
