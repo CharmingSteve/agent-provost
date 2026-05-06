@@ -114,8 +114,14 @@
   [ "$status" -ne 0 ]
 }
 
-@test "CI log schema validation enforces escape=json in default.conf log_format" {
-  run grep -E "log_format\\[\\[:space:\\]\\]\\+json_full\\[\\[:space:\\]\\]\\+escape=json" .github/workflows/ci.yml
+@test "CI validates final Fluent Bit JSON output using check-jsonschema" {
+  run grep -E "check-jsonschema" .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E "\-\-jsonlines" .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E "schemas/access_log_schema\.json" .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E "schemas/error_log_schema\.json" .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 
