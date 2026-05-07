@@ -354,7 +354,7 @@ jobs:
   # ── Integration tests (requires Alpaca credentials) ────────────────────────
   integration-tests:
     name: Integration tests (end-to-end)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [check-credentials, test-lua, test-shell, build-secure-push-test]
     if: ${{ needs.check-credentials.outputs.enabled == 'true' }}
     steps:
