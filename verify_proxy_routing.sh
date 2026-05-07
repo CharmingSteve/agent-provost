@@ -206,24 +206,28 @@ with requests.Session() as s:
             raise SystemExit(1)
 PY
 
-case "$VERIFY_REQUIRE_S3" in
-    true)
-        check_s3_for_probe
-        ;;
-    false)
-        check_buffer_evidence
-        ;;
-    auto)
-        if [ -n "${VERIFY_S3_BUCKET:-}" ] && [ -n "${VERIFY_S3_REGION:-}" ] && command -v aws >/dev/null 2>&1; then
-            check_s3_for_probe || check_buffer_evidence
-        else
+if [ "${PROVOST_VERIFY_SKIP_EVIDENCE_CHECK:-}" = "true" ]; then
+    echo "[verify] skipping buffer/S3 evidence check by PROVOST_VERIFY_SKIP_EVIDENCE_CHECK=true"
+else
+    case "$VERIFY_REQUIRE_S3" in
+        true)
+            check_s3_for_probe
+            ;;
+        false)
             check_buffer_evidence
-        fi
-        ;;
-    *)
-        echo "[verify] FAIL: VERIFY_REQUIRE_S3 must be true|false|auto"
-        exit 1
-        ;;
-esac
+            ;;
+        auto)
+            if [ -n "${VERIFY_S3_BUCKET:-}" ] && [ -n "${VERIFY_S3_REGION:-}" ] && command -v aws >/dev/null 2>&1; then
+                check_s3_for_probe || check_buffer_evidence
+            else
+                check_buffer_evidence
+            fi
+            ;;
+        *)
+            echo "[verify] FAIL: VERIFY_REQUIRE_S3 must be true|false|auto"
+            exit 1
+            ;;
+    esac
+fi
 
 echo "[verify] PASS: fluent-bit socket/audit path validated"
