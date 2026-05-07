@@ -413,12 +413,34 @@ jobs:
         run: |
           mkdir -p logs/fluent-bit-storage/final
           chmod -R a+rwx logs/fluent-bit-storage
+      - name: Validate compose config and service discovery inputs
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.versions config >/tmp/compose.rendered.yml
+          grep -n "alpaca-mcp" /tmp/compose.rendered.yml || true
+          grep -nE "set \$alpaca_upstream|proxy_pass http://\$alpaca_upstream;|proxy_pass http://alpaca-mcp:8088;" default.conf || true
+          test -n "${PROVOST_SECRETS_DIR:-}" || { echo "::error::PROVOST_SECRETS_DIR is not set"; exit 1; }
+          test -f "${PROVOST_SECRETS_DIR}/provost_token" || { echo "::error::provost_token missing in ${PROVOST_SECRETS_DIR}"; ls -la "${PROVOST_SECRETS_DIR}" || true; exit 1; }
+          ls -la "${PROVOST_SECRETS_DIR}" || true
       - name: Run Integration Tests
         env:
           BOOTSTRAP_MODE: runner
           PROVOST_VERIFY_ALLOW_MCP_PROBE_FAILURE: "true"
           PROVOST_VERIFY_SKIP_EVIDENCE_CHECK: "true"
         run: ./verify_proxy_routing.sh
+      - name: Assert integration stack is healthy
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.versions ps
+          for svc in alpaca-mcp agent-provost fluent-bit; do
+            status="$(docker inspect -f '{{.State.Status}}' "$svc" 2>/dev/null || true)"
+            echo "$svc status=$status"
+            if [ "$status" != "running" ]; then
+              echo "::error::${svc} is not running"
+              docker logs "$svc" 2>&1 | tail -n 20 || true
+              exit 1
+            fi
+          done
       - name: Debug fluent-bit log pipeline
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
