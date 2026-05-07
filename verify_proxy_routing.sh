@@ -193,11 +193,12 @@ with requests.Session() as s:
         time.sleep(1)
     call(s, None, "notifications/initialized", {})
     c2, r2 = call(s, 2, "tools/call", {"name": "get_account_info", "arguments": {}})
+    has_rpc_error = isinstance(r2, dict) and r2.get("error") is not None
     is_error = ((r2.get("result") or {}).get("isError")) if isinstance(r2, dict) else True
     print(f"initialize_status={c1}")
     print(f"tools_call_status={c2}")
     print(f"tool_is_error={is_error}")
-    if c1 != 200 or c2 != 200 or is_error:
+    if c1 != 200 or c2 != 200 or has_rpc_error or is_error is True:
         raise SystemExit(1)
 PY
 
