@@ -420,6 +420,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: "us-east-1"
+          VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
         run: |
           set -euo pipefail
 
@@ -433,7 +434,7 @@ jobs:
           echo "=== Downloading Logs from CI S3 Bucket ==="
           mkdir -p downloaded-logs
           # Sync ONLY the logs from this specific CI run using the unique INSTANCE_ID prefix
-          aws s3 sync s3://$VERIFY_S3_BUCKET/ci-run-${{ github.run_id }}/ downloaded-logs/
+          aws s3 sync "s3://${VERIFY_S3_BUCKET}/ci-run-${{ github.run_id }}/" downloaded-logs/
 
           echo "=== Installing Validator ==="
           python3 -m venv /tmp/schema-venv
