@@ -371,6 +371,19 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
         with:
           registry-type: public
+      - name: Pre-pull compose images (retry on transient network errors)
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if docker compose --env-file .env.versions pull; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "::error::docker compose pull failed after 5 attempts"
+              exit 1
+            fi
+            echo "::warning::docker compose pull failed (attempt ${attempt}/5); retrying"
+          done
       - name: Install jq
         run: sudo apt-get install -y jq
       - name: Stage real secrets for integration tests
