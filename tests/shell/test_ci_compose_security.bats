@@ -114,14 +114,18 @@
   [ "$status" -ne 0 ]
 }
 
-@test "CI runs always-on Fluent Bit schema validation against emitted logs" {
-  run grep -E 'python3 -m venv /tmp/check-jsonschema-venv' .github/workflows/ci.yml
-  [ "$status" -eq 0 ]
-  run grep -E 'sh scripts/validate_fluent_bit_json\.sh' .github/workflows/ci.yml
-  [ "$status" -eq 0 ]
+@test "CI runs Fluent Bit schema validation in integration-tests (not compose-smoke)" {
   run grep -E 'compose-smoke:' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
   run grep -E 'integration-tests:' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'Generate Traffic and Validate Final Fluent Bit JSON Schemas' .github/workflows/ci.yml
+  [ "$status" -ne 0 ]
+  run grep -E 'name: Validate Final Fluent Bit JSON Schemas' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'CI_TESTING: "true"' .github/workflows/ci.yml
+  [ "$status" -eq 0 ]
+  run grep -E 'echo "CI_TESTING=true" >> "\$GITHUB_ENV"' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
 }
 

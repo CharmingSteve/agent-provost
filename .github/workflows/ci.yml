@@ -371,6 +371,9 @@ jobs:
         run: |
           mkdir -p logs/fluent-bit-storage
           chmod -R a+rwx logs/fluent-bit-storage
+          if ! grep -q 'conf.d/output-local-file.conf' fluent-bit/fluent-bit.conf; then
+            sed -i '/conf\.d\/output-s3\.conf/i @INCLUDE conf.d/output-local-file.conf' fluent-bit/fluent-bit.conf
+          fi
           eval "$(sh bootstrap.sh runner)"
           echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR" >> "$GITHUB_ENV"
           echo "CI_TESTING=true" >> "$GITHUB_ENV"
