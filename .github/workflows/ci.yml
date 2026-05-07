@@ -400,6 +400,10 @@ jobs:
         run: |
           eval "$(sh bootstrap.sh runner)"
           echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR" >> "$GITHUB_ENV"
+      - name: Ensure local dirs for bind mounts
+        run: |
+          mkdir -p logs/fluent-bit-storage/final
+          chmod -R a+rwx logs/fluent-bit-storage
       - name: Run Integration Tests
         env:
           BOOTSTRAP_MODE: runner
