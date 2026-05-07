@@ -167,7 +167,7 @@ def call(sess, rid, method, params=None):
     if params is not None:
         payload["params"] = params
     try:
-        r = sess.post(url, headers=headers, json=payload, timeout=45)
+        r = sess.post(url, headers=headers, json=payload, timeout=10)
     except requests.RequestException as exc:
         return 0, {"error": str(exc)}
     if r.headers.get("mcp-session-id"):
@@ -186,11 +186,11 @@ def call(sess, rid, method, params=None):
 
 with requests.Session() as s:
     c1 = 0
-    for _ in range(20):
+    for _ in range(90):
         c1, _ = call(s, 1, "initialize", {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "verify", "version": "1.0"}})
         if c1 == 200:
             break
-        time.sleep(1)
+        time.sleep(2)
     call(s, None, "notifications/initialized", {})
     c2, r2 = call(s, 2, "tools/call", {"name": "get_account_info", "arguments": {}})
     has_rpc_error = isinstance(r2, dict) and r2.get("error") is not None
