@@ -119,6 +119,57 @@ Blocked requests return either `403 Forbidden` (`PROVOST_INTERVENTION`) for poli
 sed -i 's/"limit": 100/"limit": 10/' rules.json
 ```
 
+### Updating Your Trading Rules (Guardrails) via AWS Console
+
+Agent Provost enforces strict risk management rules. You set these rules when you first deployed the stack, but you can update them at any time directly through the AWS Console.
+
+Because Agent Provost is completely stateless, updating these rules will safely replace your EC2 instance with a new one containing the updated guardrails — without losing any state.
+
+**Available Rules to Update:**
+
+| Parameter | Description |
+| --- | --- |
+| `MaxTradeNotional` | The maximum dollar amount allowed for a single trade. |
+| `DailyNotionalLimit` | The total dollar amount the AI is allowed to trade per day. |
+| `BlockedTickers` | A comma-separated list of symbols the AI is forbidden from trading (e.g., `GME,AMC,DJT`). |
+| `AllowedAssetClasses` | The types of assets the AI can trade (e.g., `us_equity,crypto`). |
+
+**How to Update:**
+1. Go to the **AWS CloudFormation Console**.
+2. Select your Agent Provost stack and click **Update**.
+3. Select **Use current template** and click **Next**.
+4. Modify the rule parameters to your new desired limits.
+5. Click **Next** through the remaining screens and click **Submit**.
+
+AWS will automatically provision a new instance with your updated `rules.json` and seamlessly swap it out.
+
+> 💬 **Need a custom rule set tailored to your firm's specific risk policy?** We build bespoke guardrail configurations for institutional clients. [Open an issue](https://github.com/CharmingSteve/agent-provost/issues) or start a [Discussion](https://github.com/CharmingSteve/agent-provost/discussions) to request a custom rule set.
+
+### Updating Rules Using an AI Assistant
+
+The rules system is designed to be self-describing. You can use any AI assistant (Claude, ChatGPT, Copilot, etc.) to safely generate an updated `rules.json` by giving it the following prompt.
+
+> ⚠️ **Important:** Always instruct your AI to edit `rules.json` only. Never allow it to modify `lua/rules_engine.lua` or `lua/rule_loader.lua` as part of a routine rule change — those files contain the evaluation logic and should only be changed by developers.
+
+**Sample AI Prompt for Rule Updates:**
+
+```
+Here is the current contents of my rules.json file: [PASTE YOUR rules.json HERE]
+
+Please update ONLY the rules.json file with the following changes:
+- [Describe your change, e.g. "Lower the MaxTradeNotional limit from 50000 to 10000"]
+- [e.g. "Add GME and TSLA to the blocked_tickers list"]
+- [e.g. "Enable the trading_window rule and set it to UTC hours 13 to 21"]
+
+Rules:
+1. Edit ONLY rules.json. Do not touch any Lua files, any config files, or any other file.
+2. Keep all existing rule keys. Only change the values I have specified.
+3. Validate that the output is valid JSON before returning it.
+4. Return the complete updated rules.json file contents only.
+```
+
+After updating, save the file on the host. OpenResty will pick up the new rules within 10 seconds — no restart required. See [RULES_ENGINE.md](RULES_ENGINE.md) for the full hot-reload architecture.
+
 ### 💡 We Need Your Ideas!
 We are expanding the safety suite. What other controls should we add?
 - [ ] Price-based slippage protection?
@@ -270,6 +321,22 @@ The sovereign mock harness is not included in this branch. Use the separate demo
 - **Independent Developers:** Prevent "buggy" agent loops from draining your Alpaca account.
 - **Enterprise AI:** Maintain a "Human-in-the-Loop" style oversight via automated logs.
 
+## ⚖️ Regulatory Compliance Alignment
+
+Agent Provost is designed to support compliance with financial AI governance regulations across major jurisdictions. The immutable audit trail, structured JSON logs, kill-switch controls, and traceable agent actions are specifically architected to align with the following frameworks:
+
+| Region | Regulation | Alignment Summary |
+| --- | --- | --- |
+| 🇺🇸 USA | **SEC Advisers Act Rule 204‑2** | Supports required retention of investment‑decision records through immutable audit logs, traceable agent actions, and documented decision pathways. |
+| 🇺🇸 USA | **FINRA 3110 / 4511** | Provides supervisory oversight features and optional S3 Object Lock for tamper‑proof retention consistent with books‑and‑records expectations. |
+| 🇪🇺 EU | **EU AI Act (High‑Risk AI Requirements)** | Delivers mandatory logging, traceability, human‑override controls, and operational safeguards such as kill‑switch and agent registration. |
+| 🇬🇧 UK | **FCA AI Governance Principles** | Aligns with expectations for auditability, operational resilience, and governance of automated decision systems. |
+| 🇸🇬 Singapore | **MAS FEAT Principles** | Enables transparency, accountability, and human oversight through structured logging and agent‑level control mechanisms. |
+| 🇨🇦 Canada | **OSFI AI Risk Management** | Supports governance, monitoring, and audit‑trail requirements for AI systems used in financial decision processes. |
+| 🌐 Global | **ISO 42001 (AI Management) / ISO 27001 (Security)** | Provides foundational controls for AI governance, security, and traceability consistent with international standards. |
+
+> **Note:** This alignment summary describes architectural intent and does not constitute legal or compliance advice. Consult your compliance officer to validate applicability to your specific regulatory context.
+
 ---
 
 ## Important Notes
@@ -285,6 +352,30 @@ The sovereign mock harness is not included in this branch. Use the separate demo
 - Compensating controls: non-root users, `no-new-privileges`, dropped Linux capabilities, tmpfs for `/tmp`, pinned images/dependencies, and CI security scans (Trivy/Checkov/pip-audit/gitleaks).
 - Owner: Steve (repo owner).
 - Deadline to remove exception: migrate patching to Docker build stage by `v0.3.0` (target date: 2026-05-31), then set `alpaca-mcp` to read-only.
+
+---
+
+## ☁️ AWS CloudFormation Deployment
+
+### Stack Name Length Limit
+
+> ⚠️ **The CloudFormation Stack Name must be 25 characters or less.**
+
+Although AWS CloudFormation allows stack names up to 128 characters, Agent Provost enforces a stricter limit of **25 characters**. This is because the stack name is appended directly to the S3 audit log bucket name, which is constructed as:
+
+```
+ap-logs-${AWS::AccountId}-${AWS::Region}-${AWS::StackName}
+```
+
+S3 bucket names are limited to 63 characters by AWS. With the fixed prefix (`ap-logs-`), your Account ID (12 digits), your Region (e.g., `us-east-1`), and the separating dashes, the remaining space for your stack name is **25 characters**.
+
+**Examples of valid stack names:**
+- `provost-prod`
+- `my-trading-agent`
+- `acme-provost-live`
+
+**Examples of invalid stack names (too long):**
+- `my-company-agent-provost-production-stack` ❌
 
 ---
 
