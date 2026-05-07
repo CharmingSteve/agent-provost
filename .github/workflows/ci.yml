@@ -422,9 +422,7 @@ jobs:
           ACCESS_LOGS=$(find logs/fluent-bit-storage -type f -name "*access*")
           if [ -z "$ACCESS_LOGS" ]; then
             echo "::warning::No access logs found; generating deterministic rogue-field sample for schema gate"
-            cat > /tmp/rogue-access.jsonl <<'EOF'
-{"time_local":"01/Jan/2026:00:00:00 +0000","remote_addr":"127.0.0.1","request":"GET / HTTP/1.1","status":"200","body_bytes_sent":"1","request_time":"0.001","upstream_response_time":"0.001","provost_request_id":"ci-rogue","provost_user":"ci","provost_machine":"runner","request_body":"","resp_body":"","pri":"13","host":"localhost","ident":"provost_local_access","stream_tag":"provost.access","log_type":"access","Region":"us-east-1","Instance_ID":"ci","message":"{}","test_rogue_field":"I should break the CI"}
-EOF
+            printf '%s\n' '{"time_local":"01/Jan/2026:00:00:00 +0000","remote_addr":"127.0.0.1","request":"GET / HTTP/1.1","status":"200","body_bytes_sent":"1","request_time":"0.001","upstream_response_time":"0.001","provost_request_id":"ci-rogue","provost_user":"ci","provost_machine":"runner","request_body":"","resp_body":"","pri":"13","host":"localhost","ident":"provost_local_access","stream_tag":"provost.access","log_type":"access","Region":"us-east-1","Instance_ID":"ci","message":"{}","test_rogue_field":"I should break the CI"}' > /tmp/rogue-access.jsonl
             ACCESS_LOGS=/tmp/rogue-access.jsonl
           fi
           for file in $ACCESS_LOGS; do
