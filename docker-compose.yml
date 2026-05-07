@@ -47,6 +47,7 @@ services:
       S3_BUCKET: ${S3_BUCKET:-agent-provost-local}
       INSTANCE_ID: ${INSTANCE_ID:-local-dev}
       TZ: ${TZ:-Asia/Jerusalem}
+      CI_TESTING: ${CI_TESTING:-false}
     healthcheck:
       test: ["CMD", "/fluent-bit/bin/fluent-bit", "--version"]
       interval: 5s
