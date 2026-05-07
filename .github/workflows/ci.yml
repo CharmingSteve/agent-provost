@@ -355,7 +355,7 @@ jobs:
   integration-tests:
     name: Integration tests (end-to-end)
     runs-on: ubuntu-24.04-arm
-    needs: [check-credentials, test-lua, test-shell, build-secure-push-test]
+    needs: [check-credentials]
     if: ${{ needs.check-credentials.outputs.enabled == 'true' }}
     steps:
       - uses: actions/checkout@v4
