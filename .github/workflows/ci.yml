@@ -409,10 +409,10 @@ jobs:
           set -euo pipefail
           sed -i "s#/agent-provost/logs/access/#/ci-run-${{ github.run_id }}/agent-provost/logs/access/#" fluent-bit/conf.d/output-s3.conf
           sed -i "s#/agent-provost/logs/error/#/ci-run-${{ github.run_id }}/agent-provost/logs/error/#" fluent-bit/conf.d/output-s3.conf
-            - name: Ensure local dirs for bind mounts
-              run: |
-                mkdir -p logs/fluent-bit-storage/final
-                chmod -R a+rwx logs/fluent-bit-storage
+      - name: Ensure local dirs for bind mounts
+        run: |
+          mkdir -p logs/fluent-bit-storage/final
+          chmod -R a+rwx logs/fluent-bit-storage
       - name: Run Integration Tests
         env:
           BOOTSTRAP_MODE: runner
