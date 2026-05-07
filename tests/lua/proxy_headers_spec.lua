@@ -23,7 +23,10 @@ describe("proxy headers and routing (default.conf)", function()
     end)
 
     it("llm-to-mcp proxies upstream to alpaca-mcp on port 8088", function()
-        assert.truthy(conf:find("proxy_pass http://alpaca%-mcp:8088", 1, false))
+        local static_upstream = conf:find("proxy_pass http://alpaca%-mcp:8088", 1, false)
+        local dynamic_upstream = conf:find("set %$alpaca_upstream \"alpaca%-mcp:8088\"", 1, false)
+            and conf:find("proxy_pass http://%$alpaca_upstream", 1, false)
+        assert.truthy(static_upstream or dynamic_upstream)
     end)
 
     -- SSE / streaming settings on llm-to-mcp
