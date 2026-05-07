@@ -562,6 +562,7 @@ jobs:
           sed -i "s|^ALPACA_IMAGE_TAG=.*|ALPACA_IMAGE_TAG=${ECR_DIGEST}|" .env.versions
       - name: Step 4c (Commit pinned digest back to branch)
         if: env.IMAGE_CHANGED == 'true'
+        continue-on-error: true
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "ci: pin ALPACA_IMAGE_TAG to ECR digest [skip ci]"
