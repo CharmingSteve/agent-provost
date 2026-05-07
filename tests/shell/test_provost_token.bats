@@ -7,6 +7,8 @@
 # - Rejects requests with invalid token with 403
 # - Rejects requests missing identity headers with 400
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   export TEST_REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
 }
