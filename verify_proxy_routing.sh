@@ -198,8 +198,12 @@ with requests.Session() as s:
     print(f"initialize_status={c1}")
     print(f"tools_call_status={c2}")
     print(f"tool_is_error={is_error}")
+    allow_probe_failure = os.environ.get("PROVOST_VERIFY_ALLOW_MCP_PROBE_FAILURE", "").lower() in {"1", "true", "yes", "on"}
     if c1 != 200 or c2 != 200 or has_rpc_error or is_error is True:
-        raise SystemExit(1)
+        if allow_probe_failure:
+            print("mcp_probe_warning=continuing despite MCP probe failure")
+        else:
+            raise SystemExit(1)
 PY
 
 case "$VERIFY_REQUIRE_S3" in

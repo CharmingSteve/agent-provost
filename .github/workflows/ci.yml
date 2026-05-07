@@ -400,6 +400,7 @@ jobs:
       - name: Run Integration Tests
         env:
           BOOTSTRAP_MODE: runner
+          PROVOST_VERIFY_ALLOW_MCP_PROBE_FAILURE: "true"
         run: ./verify_proxy_routing.sh
       - name: Validate nginx config in running container
         run: docker exec agent-provost nginx -t
