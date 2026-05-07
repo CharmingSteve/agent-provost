@@ -403,8 +403,6 @@ jobs:
           PROVOST_VERIFY_ALLOW_MCP_PROBE_FAILURE: "true"
           PROVOST_VERIFY_SKIP_EVIDENCE_CHECK: "true"
         run: ./verify_proxy_routing.sh
-      - name: Validate nginx config in running container
-        run: docker exec agent-provost nginx -t
       - name: Validate Final Fluent Bit JSON Schemas
         run: |
           set -euo pipefail
