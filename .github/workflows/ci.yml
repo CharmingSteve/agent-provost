@@ -390,61 +390,67 @@ jobs:
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
-          CI_TESTING: "true"
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: "us-east-1"
+          S3_BUCKET: "agent-provost-test-logs-863750994059-us-east-1-an"
+          VERIFY_S3_BUCKET: "agent-provost-test-logs-863750994059-us-east-1-an"
+          VERIFY_S3_REGION: "us-east-1"
+          INSTANCE_ID: "ci-run-${{ github.run_id }}"
         run: |
-          mkdir -p logs/fluent-bit-storage
-          chmod -R a+rwx logs/fluent-bit-storage
           eval "$(sh bootstrap.sh runner)"
           echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR" >> "$GITHUB_ENV"
-          echo "CI_TESTING=true" >> "$GITHUB_ENV"
       - name: Run Integration Tests
         env:
           BOOTSTRAP_MODE: runner
           PROVOST_VERIFY_ALLOW_MCP_PROBE_FAILURE: "true"
           PROVOST_VERIFY_SKIP_EVIDENCE_CHECK: "true"
         run: ./verify_proxy_routing.sh
-      - name: Validate Final Fluent Bit JSON Schemas
+      - name: Download Logs from S3 and Validate Schema
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: "us-east-1"
         run: |
           set -euo pipefail
 
-          echo "=== Guaranteeing Logs Exist ==="
-          docker exec agent-provost curl -s http://localhost:8000/ > /dev/null || true
-          docker exec agent-provost curl -s http://localhost:8000/this-does-not-exist > /dev/null || true
+          echo "=== Forcing an Error Log ==="
+          # The integration script tests happy paths. We force a 401 Unauthorized to guarantee an error log exists.
+          curl -s http://localhost:8088/ > /dev/null || true
+
+          echo "=== Waiting for Fluent Bit S3 Upload ==="
+          sleep 15
+
+          echo "=== Downloading Logs from CI S3 Bucket ==="
+          mkdir -p downloaded-logs
+          # Sync ONLY the logs from this specific CI run using the unique INSTANCE_ID prefix
+          aws s3 sync s3://agent-provost-test-logs-863750994059-us-east-1-an/ci-run-${{ github.run_id }}/ downloaded-logs/
 
           echo "=== Installing Validator ==="
           python3 -m venv /tmp/schema-venv
           /tmp/schema-venv/bin/pip install --quiet check-jsonschema
           export PATH="/tmp/schema-venv/bin:$PATH"
 
-          sleep 5
-
           echo "=== Validating Access Logs ==="
-          ACCESS_LOGS=$(find logs/fluent-bit-storage -type f -name "*access*")
+          ACCESS_LOGS=$(find downloaded-logs -type f -name "*access*")
           if [ -z "$ACCESS_LOGS" ]; then
-            echo "::warning::No access logs found; generating deterministic rogue-field sample for schema gate"
-            printf '%s\n' '{"time_local":"01/Jan/2026:00:00:00 +0000","remote_addr":"127.0.0.1","request":"GET / HTTP/1.1","status":"200","body_bytes_sent":"1","request_time":"0.001","upstream_response_time":"0.001","provost_request_id":"ci-rogue","provost_user":"ci","provost_machine":"runner","request_body":"","resp_body":"","pri":"13","host":"localhost","ident":"provost_local_access","stream_tag":"provost.access","log_type":"access","Region":"us-east-1","Instance_ID":"ci","message":"{}","test_rogue_field":"I should break the CI"}' > /tmp/rogue-access.json
-            ACCESS_LOGS=/tmp/rogue-access.json
+            echo "❌ ERROR: No access logs found in S3!"
+            exit 1
           fi
           for file in $ACCESS_LOGS; do
             echo "Checking $file..."
-            if [ "$file" = "/tmp/rogue-access.json" ]; then
-              check-jsonschema --schemafile schemas/access_log_schema.json "$file"
-            else
-              head -n 1 "$file" > /tmp/current-access.json
-              check-jsonschema --schemafile schemas/access_log_schema.json /tmp/current-access.json
-            fi
+            check-jsonschema --schemafile schemas/access_log_schema.json --jsonlines "$file"
           done
 
           echo "=== Validating Error Logs ==="
-          ERROR_LOGS=$(find logs/fluent-bit-storage -type f -name "*error*")
+          ERROR_LOGS=$(find downloaded-logs -type f -name "*error*")
           if [ -z "$ERROR_LOGS" ]; then
-            echo "❌ ERROR: No error logs found!"
+            echo "❌ ERROR: No error logs found in S3!"
             exit 1
           fi
           for file in $ERROR_LOGS; do
             echo "Checking $file..."
-            head -n 1 "$file" > /tmp/current-error.json
-            check-jsonschema --schemafile schemas/error_log_schema.json /tmp/current-error.json
+            check-jsonschema --schemafile schemas/error_log_schema.json --jsonlines "$file"
           done
 
   # ── Build → Secure → Push → Test (ECR Public) ─────────────────────────────
