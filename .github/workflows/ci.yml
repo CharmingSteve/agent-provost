@@ -393,50 +393,13 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: "us-east-1"
-          S3_BUCKET: "agent-provost-test-logs-863750994059-us-east-1-an"
-          VERIFY_S3_BUCKET: "agent-provost-test-logs-863750994059-us-east-1-an"
+          S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
+          VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
           VERIFY_S3_REGION: "us-east-1"
           INSTANCE_ID: "ci-run-${{ github.run_id }}"
         run: |
           eval "$(sh bootstrap.sh runner)"
           echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR" >> "$GITHUB_ENV"
-      - name: Resolve CI bucket from CloudFormation
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: "us-east-1"
-          CI_STACK_NAME: ${{ secrets.CI_STACK_NAME }}
-        run: |
-          set -euo pipefail
-
-          STACK_NAME="${CI_STACK_NAME:-}"
-          if [ -z "$STACK_NAME" ]; then
-            STACK_NAME=$(aws cloudformation list-stacks \
-              --region "$AWS_REGION" \
-              --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE \
-              --query "reverse(sort_by(StackSummaries,&LastUpdatedTime))[?starts_with(StackName, 'agent-provost')].[StackName] | [0][0]" \
-              --output text)
-          fi
-
-          if [ -z "$STACK_NAME" ] || [ "$STACK_NAME" = "None" ]; then
-            echo "::error::Unable to resolve CloudFormation stack name for CI logs bucket"
-            exit 1
-          fi
-
-          RESOLVED_BUCKET=$(aws cloudformation describe-stacks \
-            --region "$AWS_REGION" \
-            --stack-name "$STACK_NAME" \
-            --query "Stacks[0].Outputs[?OutputKey=='LogsBucketName'].OutputValue | [0]" \
-            --output text)
-
-          if [ -z "$RESOLVED_BUCKET" ] || [ "$RESOLVED_BUCKET" = "None" ]; then
-            echo "::error::CloudFormation stack '$STACK_NAME' did not return LogsBucketName output"
-            exit 1
-          fi
-
-          echo "S3_BUCKET=$RESOLVED_BUCKET" >> "$GITHUB_ENV"
-          echo "VERIFY_S3_BUCKET=$RESOLVED_BUCKET" >> "$GITHUB_ENV"
-          echo "Resolved CI bucket: $RESOLVED_BUCKET"
       - name: Patch Fluent Bit S3 key format for CI run isolation
         run: |
           set -euo pipefail
@@ -478,23 +441,23 @@ jobs:
           export PATH="/tmp/schema-venv/bin:$PATH"
 
           echo "=== Validating Access Logs ==="
-          ACCESS_LOGS=$(find downloaded-logs -type f -name "*access*")
-          if [ -z "$ACCESS_LOGS" ]; then
+          ACCESS_LOG_COUNT=$(find downloaded-logs -type f -name "*access*" | wc -l | tr -d ' ')
+          if [ "$ACCESS_LOG_COUNT" -eq 0 ]; then
             echo "❌ ERROR: No access logs found in S3!"
             exit 1
           fi
-          for file in $ACCESS_LOGS; do
+          find downloaded-logs -type f -name "*access*" -print0 | while IFS= read -r -d '' file; do
             echo "Checking $file..."
             check-jsonschema --schemafile schemas/access_log_schema.json --jsonlines "$file"
           done
 
           echo "=== Validating Error Logs ==="
-          ERROR_LOGS=$(find downloaded-logs -type f -name "*error*")
-          if [ -z "$ERROR_LOGS" ]; then
+          ERROR_LOG_COUNT=$(find downloaded-logs -type f -name "*error*" | wc -l | tr -d ' ')
+          if [ "$ERROR_LOG_COUNT" -eq 0 ]; then
             echo "❌ ERROR: No error logs found in S3!"
             exit 1
           fi
-          for file in $ERROR_LOGS; do
+          find downloaded-logs -type f -name "*error*" -print0 | while IFS= read -r -d '' file; do
             echo "Checking $file..."
             check-jsonschema --schemafile schemas/error_log_schema.json --jsonlines "$file"
           done
