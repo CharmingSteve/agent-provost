@@ -400,7 +400,6 @@ jobs:
         run: |
           eval "$(sh bootstrap.sh runner)"
           {
-            echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR"
             echo "S3_BUCKET=ap-logs-863750994059-us-east-1-ci-test"
             echo "INSTANCE_ID=ci-run-${{ github.run_id }}"
           } >> "$GITHUB_ENV"
@@ -416,6 +415,7 @@ jobs:
       - name: Validate compose config and service discovery inputs
         run: |
           set -euo pipefail
+          eval "$(sh bootstrap.sh runner)"
           docker compose --env-file .env.versions config >/tmp/compose.rendered.yml
           grep -n "alpaca-mcp" /tmp/compose.rendered.yml || true
           grep -nE "set \$alpaca_upstream|proxy_pass http://\$alpaca_upstream;|proxy_pass http://alpaca-mcp:8088;" default.conf || true
