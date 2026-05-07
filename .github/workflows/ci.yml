@@ -400,6 +400,48 @@ jobs:
         run: |
           eval "$(sh bootstrap.sh runner)"
           echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR" >> "$GITHUB_ENV"
+      - name: Resolve CI bucket from CloudFormation
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: "us-east-1"
+          CI_STACK_NAME: ${{ secrets.CI_STACK_NAME }}
+        run: |
+          set -euo pipefail
+
+          STACK_NAME="${CI_STACK_NAME:-}"
+          if [ -z "$STACK_NAME" ]; then
+            STACK_NAME=$(aws cloudformation list-stacks \
+              --region "$AWS_REGION" \
+              --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE \
+              --query "reverse(sort_by(StackSummaries,&LastUpdatedTime))[?starts_with(StackName, 'agent-provost')].[StackName] | [0][0]" \
+              --output text)
+          fi
+
+          if [ -z "$STACK_NAME" ] || [ "$STACK_NAME" = "None" ]; then
+            echo "::error::Unable to resolve CloudFormation stack name for CI logs bucket"
+            exit 1
+          fi
+
+          RESOLVED_BUCKET=$(aws cloudformation describe-stacks \
+            --region "$AWS_REGION" \
+            --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='LogsBucketName'].OutputValue | [0]" \
+            --output text)
+
+          if [ -z "$RESOLVED_BUCKET" ] || [ "$RESOLVED_BUCKET" = "None" ]; then
+            echo "::error::CloudFormation stack '$STACK_NAME' did not return LogsBucketName output"
+            exit 1
+          fi
+
+          echo "S3_BUCKET=$RESOLVED_BUCKET" >> "$GITHUB_ENV"
+          echo "VERIFY_S3_BUCKET=$RESOLVED_BUCKET" >> "$GITHUB_ENV"
+          echo "Resolved CI bucket: $RESOLVED_BUCKET"
+      - name: Patch Fluent Bit S3 key format for CI run isolation
+        run: |
+          set -euo pipefail
+          sed -i "s#s3_key_format         /agent-provost/logs/access/#s3_key_format         ci-run-${{ github.run_id }}/agent-provost/logs/access/#" fluent-bit/conf.d/output-s3.conf
+          sed -i "s#s3_key_format         /agent-provost/logs/error/#s3_key_format         ci-run-${{ github.run_id }}/agent-provost/logs/error/#" fluent-bit/conf.d/output-s3.conf
       - name: Ensure local dirs for bind mounts
         run: |
           mkdir -p logs/fluent-bit-storage/final
@@ -428,7 +470,7 @@ jobs:
           echo "=== Downloading Logs from CI S3 Bucket ==="
           mkdir -p downloaded-logs
           # Sync ONLY the logs from this specific CI run using the unique INSTANCE_ID prefix
-          aws s3 sync s3://agent-provost-test-logs-863750994059-us-east-1-an/ci-run-${{ github.run_id }}/ downloaded-logs/
+          aws s3 sync s3://$VERIFY_S3_BUCKET/ci-run-${{ github.run_id }}/ downloaded-logs/
 
           echo "=== Installing Validator ==="
           python3 -m venv /tmp/schema-venv
