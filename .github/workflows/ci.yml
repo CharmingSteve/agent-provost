@@ -407,12 +407,12 @@ jobs:
       - name: Patch Fluent Bit S3 key format for CI run isolation
         run: |
           set -euo pipefail
-          sed -i "s#s3_key_format         /agent-provost/logs/access/#s3_key_format         ci-run-${{ github.run_id }}/agent-provost/logs/access/#" fluent-bit/conf.d/output-s3.conf
-          sed -i "s#s3_key_format         /agent-provost/logs/error/#s3_key_format         ci-run-${{ github.run_id }}/agent-provost/logs/error/#" fluent-bit/conf.d/output-s3.conf
-      - name: Ensure local dirs for bind mounts
-        run: |
-          mkdir -p logs/fluent-bit-storage/final
-          chmod -R a+rwx logs/fluent-bit-storage
+          sed -i "s#/agent-provost/logs/access/#/ci-run-${{ github.run_id }}/agent-provost/logs/access/#" fluent-bit/conf.d/output-s3.conf
+          sed -i "s#/agent-provost/logs/error/#/ci-run-${{ github.run_id }}/agent-provost/logs/error/#" fluent-bit/conf.d/output-s3.conf
+            - name: Ensure local dirs for bind mounts
+              run: |
+                mkdir -p logs/fluent-bit-storage/final
+                chmod -R a+rwx logs/fluent-bit-storage
       - name: Run Integration Tests
         env:
           BOOTSTRAP_MODE: runner
