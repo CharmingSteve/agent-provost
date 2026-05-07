@@ -427,24 +427,52 @@ jobs:
           VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
         run: |
           set -euo pipefail
-
+      
           echo "=== Forcing an Error Log ==="
-          # The integration script tests happy paths. We force a 401 Unauthorized to guarantee an error log exists.
-          curl -s http://localhost:8088/ > /dev/null || true
-
+          status_file=/tmp/provost_curl_status.txt
+          body_file=/tmp/provost_curl_body.txt
+      
+          curl -sv -o "$body_file" -w '%{http_code}\n' http://localhost:8088/ >"$status_file" 2>/tmp/provost_curl_verbose.txt || true
+      
+          echo "--- curl verbose ---"
+          cat /tmp/provost_curl_verbose.txt || true
+          echo "--- curl status ---"
+          cat "$status_file" || true
+          echo "--- curl body ---"
+          cat "$body_file" || true
+      
           echo "=== Waiting for Fluent Bit S3 Upload ==="
           sleep 65
-
+      
+          echo "=== Fluent Bit local output debug ==="
+          find logs -maxdepth 4 -type f | sort || true
+          find /tmp -maxdepth 3 -type f 2>/dev/null | sort | grep -i fluent || true
+      
+          echo "=== Fluent Bit container local files ==="
+          docker exec fluent-bit sh -lc 'find /var/log/fluent-bit -maxdepth 4 -type f | sort' || true
+          docker exec fluent-bit sh -lc 'find /buffers -maxdepth 4 -type f | sort' || true
+      
+          echo "=== Tail local access/error artifacts from fluent-bit container ==="
+          docker exec fluent-bit sh -lc 'for f in $(find /var/log/fluent-bit -type f 2>/dev/null | sort); do echo "--- $f"; tail -n 20 "$f"; done' || true
+      
+          echo "=== Fluent Bit logs before S3 download ==="
+          docker logs fluent-bit 2>&1 | tail -n 300 || true
+      
+          echo "=== Listing S3 prefix before sync ==="
+          aws s3 ls "s3://${VERIFY_S3_BUCKET}/ci-run-${{ github.run_id }}/" --recursive || true
+      
           echo "=== Downloading Logs from CI S3 Bucket ==="
           mkdir -p downloaded-logs
-          # Sync ONLY the logs from this specific CI run using the unique INSTANCE_ID prefix
           aws s3 sync "s3://${VERIFY_S3_BUCKET}/ci-run-${{ github.run_id }}/" downloaded-logs/
-
+      
+          echo "=== Downloaded files ==="
+          find downloaded-logs -type f | sort || true
+      
           echo "=== Installing Validator ==="
           python3 -m venv /tmp/schema-venv
           /tmp/schema-venv/bin/pip install --quiet check-jsonschema
           export PATH="/tmp/schema-venv/bin:$PATH"
-
+      
           echo "=== Validating Access Logs ==="
           ACCESS_LOG_COUNT=$(find downloaded-logs -type f -name "*access*" | wc -l | tr -d ' ')
           if [ "$ACCESS_LOG_COUNT" -eq 0 ]; then
@@ -455,7 +483,7 @@ jobs:
             echo "Checking $file..."
             check-jsonschema --schemafile schemas/access_log_schema.json --jsonlines "$file"
           done
-
+      
           echo "=== Validating Error Logs ==="
           ERROR_LOG_COUNT=$(find downloaded-logs -type f -name "*error*" | wc -l | tr -d ' ')
           if [ "$ERROR_LOG_COUNT" -eq 0 ]; then
@@ -466,7 +494,7 @@ jobs:
             echo "Checking $file..."
             check-jsonschema --schemafile schemas/error_log_schema.json --jsonlines "$file"
           done
-      - name: Capture container logs on failure
+          - name: Capture container logs on failure
         if: failure()
         run: |
           echo "=== fluent-bit logs ==="
