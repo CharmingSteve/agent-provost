@@ -561,11 +561,20 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
-      - name: Step 3 (Login & Push to ECR)
+      - name: Step 3 (Login to Public ECR with retries)
         if: env.IMAGE_CHANGED == 'true'
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registry-type: public
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 5); do
+            if aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws; then
+              echo "Public ECR login succeeded (attempt ${attempt}/5)"
+              exit 0
+            fi
+            echo "Public ECR login failed (attempt ${attempt}/5); retrying in 5s"
+            sleep 5
+          done
+          echo "::error::Failed to login to public.ecr.aws after 5 attempts"
+          exit 1
       - name: Step 4 (Login & Push to ECR) - Push tags
         if: env.IMAGE_CHANGED == 'true'
         run: |
