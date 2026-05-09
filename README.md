@@ -138,6 +138,8 @@ Primary audit sink:
 
 - `s3://$S3_BUCKET/agent-provost/logs/%Y/%m/%d/%H/$UUID.json`
 
+Date/hour partitions follow the container local timezone (`TZ`). If `TZ=UTC`, partitions are UTC.
+
 Local durability buffer:
 
 - `./logs/fluent-bit-storage` (host)
