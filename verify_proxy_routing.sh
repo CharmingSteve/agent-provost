@@ -38,6 +38,13 @@ echo "[verify] DEBUG: S3_BUCKET=${S3_BUCKET:+<set>}"
 VERIFY_S3_BUCKET="${VERIFY_S3_BUCKET:-${S3_BUCKET:-}}"
 VERIFY_S3_REGION="${VERIFY_S3_REGION:-${AWS_REGION:-}}"
 
+# Wrapper script helper - use if available, otherwise fall back to docker compose
+COMPOSE_CMD="$ROOT_DIR/scripts/provost-compose.sh"
+if [ ! -f "$COMPOSE_CMD" ]; then
+    # Fallback for test environments that don't have scripts directory
+    COMPOSE_CMD="$DOCKER_BIN compose"
+fi
+
 RUN_DIR="${PROVOST_RUN_DIR:-$RUN_DIR}"
 SOCKET_PATH="/var/run/provost/fluent-bit.sock"
 PROBE_ID="verify-$(date +%s)-$$"
@@ -47,7 +54,7 @@ PROBE_START_RFC3339="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 wait_for_fluentbit_health() {
     i=0
     while [ "$i" -lt 30 ]; do
-        status=$($DOCKER_BIN inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' fluent-bit 2>/dev/null || true)
+        status=$($DOCKER_BIN inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' fluent-bit 2>/dev/null || echo "unknown")
         if [ "$status" = "healthy" ]; then
             echo "[verify] fluent-bit health=healthy"
             return 0
@@ -219,7 +226,7 @@ verify_network_isolation() {
 }
 
 echo "[verify] restarting stack"
-"$ROOT_DIR/scripts/provost-compose.sh" up -d --force-recreate >/dev/null
+$COMPOSE_CMD up -d --force-recreate >/dev/null
 
 wait_for_fluentbit_health
 wait_for_agent_running
@@ -229,6 +236,11 @@ if ! "$DOCKER_BIN" exec agent-provost sh -lc "test -S '$SOCKET_PATH'" >/dev/null
     exit 1
 fi
 echo "[verify] socket present: $SOCKET_PATH"
+
+# AWS credentials may be set by bootstrap; allow test override
+if [ -z "${AWS_ACCESS_KEY_ID:-}" ] && [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+    echo "[verify] WARN: AWS credentials not configured; S3 validation will be skipped"
+fi
 
 echo "[verify] probing mcp endpoint"
 PROVOST_VERIFY_REQUEST_ID="$PROBE_ID" PROVOST_VERIFY_404_REQUEST_ID="$PROBE_404_ID" "$PYTHON_BIN" - <<'PY'
