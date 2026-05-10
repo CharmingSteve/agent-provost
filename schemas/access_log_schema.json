@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "time_local",
+    "remote_addr",
+    "request",
+    "status",
+    "body_bytes_sent",
+    "request_time",
+    "upstream_response_time",
+    "provost_request_id",
+    "provost_user",
+    "provost_machine",
+    "request_body",
+    "resp_body",
+    "pri",
+    "host",
+    "ident",
+    "stream_tag",
+    "log_type",
+    "Region",
+    "Instance_ID",
+    "message"
+  ],
+  "properties": {
+    "time_local": {
+      "type": "string"
+    },
+    "remote_addr": {
+      "type": "string"
+    },
+    "request": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "body_bytes_sent": {
+      "type": "string"
+    },
+    "request_time": {
+      "type": "string"
+    },
+    "upstream_response_time": {
+      "type": "string"
+    },
+    "provost_request_id": {
+      "type": "string"
+    },
+    "provost_user": {
+      "type": "string"
+    },
+    "provost_machine": {
+      "type": "string"
+    },
+    "request_body": {
+      "type": "string"
+    },
+    "resp_body": {
+      "type": "string"
+    },
+    "pri": {
+      "type": "string"
+    },
+    "host": {
+      "type": "string"
+    },
+    "ident": {
+      "type": "string"
+    },
+    "stream_tag": {
+      "type": "string"
+    },
+    "log_type": {
+      "type": "string"
+    },
+    "Region": {
+      "type": "string"
+    },
+    "Instance_ID": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "az": {
+      "type": "string"
+    },
+    "ec2_instance_id": {
+      "type": "string"
+    }
+  }
+}

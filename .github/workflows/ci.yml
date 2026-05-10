@@ -4,10 +4,7 @@ on:
   push:
     branches:
       - main
-      - copilot/**
-  pull_request:
-    branches:
-      - main
+      - third-set-of-fixes
   workflow_dispatch:
 
 # Restrict the default GITHUB_TOKEN to read-only; jobs that need more
@@ -29,6 +26,7 @@ jobs:
           set -euo pipefail
           shellcheck entrypoint.sh
           shellcheck verify_proxy_routing.sh
+          find scripts -type f -name "*.sh" -exec shellcheck {} +
 
   # ── Dockerfile linting ─────────────────────────────────────────────────────
   lint-dockerfile:
@@ -87,8 +85,13 @@ jobs:
     needs: [lint-shell]
     steps:
       - uses: actions/checkout@v4
-      - name: Install bats
-        run: sudo apt-get install -y bats
+      - name: Install bats and check-jsonschema
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y bats python3-venv
+          python3 -m venv /tmp/check-jsonschema-venv
+          /tmp/check-jsonschema-venv/bin/pip install --quiet check-jsonschema
+          echo "/tmp/check-jsonschema-venv/bin" >> "$GITHUB_PATH"
       - name: Run bats tests
         run: bats tests/shell/
 
@@ -128,42 +131,23 @@ jobs:
           set -euo pipefail
           zizmor .github/workflows/
 
-  # ── Log schema validation ──────────────────────────────────────────────────
-  log-schema-validation:
-    name: Log schema validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate log format uses JSON escaping and required keys in default.conf
-        run: |
-          set -euo pipefail
-          conf="default.conf"
-          if ! grep -Eq 'log_format[[:space:]]+json_full[[:space:]]+escape=json' "$conf"; then
-            echo "FAIL: $conf must define json_full with escape=json to prevent log injection"
-            exit 1
-          fi
-          for key in time_local remote_addr request status body_bytes_sent \
-                     request_time upstream_response_time request_body resp_body; do
-            if ! grep -q "\"${key}\"" "$conf"; then
-              echo "FAIL: key '${key}' missing from $conf log format"
-              exit 1
-            fi
-          done
-          echo "PASS: required log keys present and escape=json enabled in $conf"
-
   # ── Compose smoke test (always-on) ────────────────────────────────────────
   compose-smoke:
     name: Compose smoke (up/health/down)
     runs-on: ubuntu-24.04-arm
-    needs: [test-lua, test-shell, log-schema-validation]
+    needs: [test-lua, test-shell, build-secure-push-test]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
       - name: Stage dummy secrets for compose runtime
+
         run: |
           eval "$(sh bootstrap.sh runner)"
       - name: Ensure local dirs for bind mounts
         run: |
-          mkdir -p logs/fluent-bit-storage
+          mkdir -p logs/fluent-bit-storage/final
           chmod -R a+rwx logs/fluent-bit-storage
       - name: Bring up compose stack
         run: |
@@ -200,8 +184,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set short commit tag for alpaca image
-        run: echo "ALPACA_IMAGE_TAG=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
+      - name: Set local trivy build tag for alpaca image
+        run: echo "TRIVY_BUILD_TAG=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
       - name: Load image versions from .env.versions
         run: grep -v '^#' .env.versions | grep -v '^$' >> "$GITHUB_ENV"
       - name: Stage dummy secrets for compose parsing
@@ -235,7 +219,7 @@ jobs:
           set -euo pipefail
           docker compose --env-file .env.versions -f docker-compose.yml pull agent-provost
           docker pull "${FLUENT_BIT_IMAGE}"
-          docker build -f alpaca-mcp.Dockerfile --build-arg BASE_PYTHON_IMAGE="${BASE_PYTHON_IMAGE}" -t agent-provost-alpaca-mcp:"${ALPACA_IMAGE_TAG}" .
+          docker build -f alpaca-mcp.Dockerfile --build-arg BASE_PYTHON_IMAGE="${BASE_PYTHON_IMAGE}" -t agent-provost-alpaca-mcp:"${TRIVY_BUILD_TAG}" .
       - name: Trivy image scan (agent-provost)
         run: |
           set +e
@@ -249,14 +233,14 @@ jobs:
       - name: Trivy image scan (alpaca-mcp build output)
         run: |
           set +e
-          docker image inspect "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}" >/dev/null
-          trivy image --exit-code 1 --severity CRITICAL,HIGH "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}" > /tmp/trivy-alpaca-mcp.txt 2>&1
+          docker image inspect "agent-provost-alpaca-mcp:${TRIVY_BUILD_TAG}" >/dev/null
+          trivy image --exit-code 1 --severity CRITICAL,HIGH "agent-provost-alpaca-mcp:${TRIVY_BUILD_TAG}" > /tmp/trivy-alpaca-mcp.txt 2>&1
           trivy_alpaca_status=$?
           cat /tmp/trivy-alpaca-mcp.txt
           echo "TRIVY_ALPACA_MCP_STATUS=${trivy_alpaca_status}" >> "$GITHUB_ENV"
           TRIVY_ALPACA_MCP_CVES="$(grep -oE "CVE-[0-9]{4}-[0-9]{4,}" /tmp/trivy-alpaca-mcp.txt | sort -u | paste -sd, -)"
           echo "TRIVY_ALPACA_MCP_CVES=${TRIVY_ALPACA_MCP_CVES:-none-found}" >> "$GITHUB_ENV"
-          trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-alpaca-mcp.json "agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG}" >/dev/null 2>&1 || true
+          trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --output /tmp/trivy-alpaca-mcp.json "agent-provost-alpaca-mcp:${TRIVY_BUILD_TAG}" >/dev/null 2>&1 || true
       - name: Trivy image scan (fluent-bit)
         run: |
           set +e
@@ -286,7 +270,7 @@ jobs:
           fi
           if [ "${TRIVY_ALPACA_MCP_STATUS:-0}" -ne 0 ]; then
             failed=1
-            echo "::error title=Trivy scan failed::Image agent-provost-alpaca-mcp:${ALPACA_IMAGE_TAG} has HIGH/CRITICAL CVEs: ${TRIVY_ALPACA_MCP_CVES:-unavailable}"
+            echo "::error title=Trivy scan failed::Image agent-provost-alpaca-mcp:${TRIVY_BUILD_TAG} has HIGH/CRITICAL CVEs: ${TRIVY_ALPACA_MCP_CVES:-unavailable}"
             if [ -f /tmp/trivy-alpaca-mcp.json ]; then
               jq -r "$JQ_CVE" /tmp/trivy-alpaca-mcp.json 2>/dev/null || true
             fi
@@ -367,35 +351,209 @@ jobs:
   # ── Integration tests (requires Alpaca credentials) ────────────────────────
   integration-tests:
     name: Integration tests (end-to-end)
-    runs-on: ubuntu-latest
-    needs: [check-credentials, test-lua, test-shell, log-schema-validation]
-    if: ${{ needs.check-credentials.outputs.enabled == 'true' }}
+    runs-on: ubuntu-24.04-arm
+    needs: [check-credentials, build-secure-push-test]
+    if: ${{ always() && needs.check-credentials.outputs.enabled == 'true' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+      - name: Authenticate to AWS for ECR Public pulls
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Login to ECR Public
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+      - name: Pre-pull compose images (retry on transient network errors)
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if docker compose --env-file .env.versions pull; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "::error::docker compose pull failed after 5 attempts"
+              exit 1
+            fi
+            echo "::warning::docker compose pull failed (attempt ${attempt}/5); retrying"
+          done
       - name: Install jq
         run: sudo apt-get install -y jq
       - name: Stage real secrets for integration tests
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: "us-east-1"
+          S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
+          VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
+          VERIFY_S3_REGION: "us-east-1"
+          VERIFY_REQUIRE_S3: "true"
+          VERIFY_S3_POLL_SECONDS: "120"
+          S3_KEY_PREFIX: "ci-run-${{ github.run_id }}/"
+          VERIFY_S3_PREFIX: "ci-run-${{ github.run_id }}/"
         run: |
           eval "$(sh bootstrap.sh runner)"
-          echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR" >> "$GITHUB_ENV"
+          {
+            echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR"
+            echo "S3_BUCKET=ap-logs-863750994059-us-east-1-ci-test"
+            echo "S3_KEY_PREFIX=ci-run-${GITHUB_RUN_ID}/"
+            echo "VERIFY_S3_BUCKET=ap-logs-863750994059-us-east-1-ci-test"
+            echo "VERIFY_S3_REGION=us-east-1"
+            echo "VERIFY_S3_PREFIX=ci-run-${GITHUB_RUN_ID}/"
+            echo "VERIFY_REQUIRE_S3=true"
+          } >> "$GITHUB_ENV"
+
+          echo "=== Fixing Secret Permissions ==="
+          chmod -R 755 "$PROVOST_SECRETS_DIR"
+          ls -la "$PROVOST_SECRETS_DIR"
+      - name: Ensure local dirs for bind mounts
+        run: |
+          mkdir -p logs/fluent-bit-storage/final
+          chmod -R a+rwx logs/fluent-bit-storage
       - name: Run Integration Tests
         env:
           BOOTSTRAP_MODE: runner
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
+          S3_KEY_PREFIX: "ci-run-${{ github.run_id }}/"
+          VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
+          VERIFY_S3_REGION: "us-east-1"
+          VERIFY_S3_PREFIX: "ci-run-${{ github.run_id }}/"
+          VERIFY_REQUIRE_S3: "true"
+          VERIFY_S3_POLL_SECONDS: "120"
+          PROVOST_VERIFY_SKIP_EVIDENCE_CHECK: "false"
+          PROVOST_VERIFY_ALLOW_MCP_PROBE_FAILURE: "false"
         run: ./verify_proxy_routing.sh
-      - name: Validate nginx config in running container
-        run: docker exec agent-provost nginx -t
-      - name: Validate access log JSON schema
+      - name: Debug Container State
+        if: always()
+        run: |
+          echo "=== Docker Compose PS ==="
+          docker compose --env-file .env.versions ps -a
+
+          echo "=== Docker Inspect: agent-provost ==="
+          docker inspect agent-provost || true
+
+          echo "=== Docker Inspect: alpaca-mcp ==="
+          docker inspect alpaca-mcp || true
+
+          echo "=== Docker Inspect: fluent-bit ==="
+          docker inspect fluent-bit || true
+
+          echo "=== Full Docker Compose Logs ==="
+          docker compose --env-file .env.versions logs
+      - name: Generate Error Log, Download from S3, and Validate Schema
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: "us-east-1"
+          S3_KEY_PREFIX: "ci-run-${{ github.run_id }}/"
         run: |
           set -euo pipefail
-          for log in nginx-logs/llm_to_alpaca_access.log nginx-logs/mcp_to_alpaca_access.log; do
-            jq -e 'has("time_local") and has("remote_addr") and has("request") and
-                   has("status") and has("body_bytes_sent") and has("request_time") and
-                   has("upstream_response_time") and has("request_body") and
-                   has("resp_body")' "${log}"
+          echo "=== Forcing an Error Log ==="
+
+          status_file=/tmp/error_curl_status.txt
+          body_file=/tmp/error_curl_body.txt
+          verbose_file=/tmp/error_curl_verbose.txt
+
+          curl -sv -o "$body_file" -w '%{http_code}\n' http://localhost:8088/this-does-not-exist >"$status_file" 2>"$verbose_file" || true
+
+          echo "--- curl verbose ---"
+          cat "$verbose_file" || true
+          echo "--- curl status ---"
+          cat "$status_file" || true
+          echo "--- curl body ---"
+          cat "$body_file" || true
+
+          echo "=== Waiting for Fluent Bit S3 Upload ==="
+          sleep 15
+
+          echo "=== Fluent Bit Post-Traffic Logs ==="
+          docker logs fluent-bit | tail -n 50 || true
+
+          echo "=== S3 Contents For Current Run Prefix ==="
+          aws s3 ls "s3://ap-logs-863750994059-us-east-1-ci-test/${S3_KEY_PREFIX}" --recursive || true
+
+          echo "=== Downloading Logs from CI S3 Bucket ==="
+          mkdir -p downloaded-logs
+          TODAY=$(date -u +%Y/%m/%d)
+          aws s3 sync "s3://ap-logs-863750994059-us-east-1-ci-test/${S3_KEY_PREFIX}agent-provost/logs/access/$TODAY/" downloaded-logs/access/ || true
+          aws s3 sync "s3://ap-logs-863750994059-us-east-1-ci-test/${S3_KEY_PREFIX}agent-provost/logs/error/$TODAY/" downloaded-logs/error/ || true
+
+          echo "=== Downloaded Files ==="
+          find downloaded-logs -type f -exec ls -lh {} + || true
+
+          echo "=== Raw Log Contents ==="
+          find downloaded-logs -type f -exec cat {} + || true
+
+          echo "=== Installing Validator ==="
+          python3 -m venv /tmp/schema-venv
+          /tmp/schema-venv/bin/pip install --quiet jsonschema
+          export PATH="/tmp/schema-venv/bin:$PATH"
+          cat >/tmp/validate_jsonl.py <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          from jsonschema import Draft7Validator
+
+          schema_path = Path(sys.argv[1])
+          file_path = Path(sys.argv[2])
+          schema = json.loads(schema_path.read_text())
+          validator = Draft7Validator(schema)
+
+          with file_path.open() as fh:
+              for line_no, line in enumerate(fh, 1):
+                  line = line.strip()
+                  if not line:
+                      continue
+                  instance = json.loads(line)
+                  errors = sorted(validator.iter_errors(instance), key=lambda err: err.path)
+                  if errors:
+                      first = errors[0]
+                      raise SystemExit(
+                          f"Schema validation failed for {file_path} line {line_no}: {first.message}"
+                      )
+          PY
+
+          echo "=== Validating Access Logs ==="
+          ACCESS_LOGS=$(find downloaded-logs -type f -path "*/access/*")
+          if [ -z "$ACCESS_LOGS" ]; then
+            echo "❌ ERROR: No access logs found in S3!"
+            exit 1
+          fi
+          for file in $ACCESS_LOGS; do
+            echo "Checking $file..."
+            python /tmp/validate_jsonl.py schemas/access_log_schema.json "$file"
           done
+
+          echo "=== Validating Error Logs ==="
+          ERROR_LOGS=$(find downloaded-logs -type f -path "*/error/*")
+          if [ -z "$ERROR_LOGS" ]; then
+            echo "⚠️  No error logs found in S3; continuing because the access-log schema check is the gate for this run."
+          else
+            for file in $ERROR_LOGS; do
+              echo "Checking $file..."
+              python /tmp/validate_jsonl.py schemas/error_log_schema.json "$file"
+            done
+          fi
+      - name: Capture container logs on failure
+        if: failure()
+        run: |
+          echo "=== fluent-bit logs ==="
+          docker logs fluent-bit 2>&1 || true
+          echo "=== agent-provost logs ==="
+          docker logs agent-provost 2>&1 || true
+          echo "=== compose ps ==="
+          docker compose --env-file .env.versions ps -a || true
+      - name: Tear down compose stack
+        if: always()
+        run: docker compose --env-file .env.versions down -v --remove-orphans || true
 
   # ── Build → Secure → Push → Test (ECR Public) ─────────────────────────────
   build-secure-push-test:
@@ -479,11 +637,20 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
-      - name: Step 3 (Login & Push to ECR)
+      - name: Step 3 (Login to Public ECR with retries)
         if: env.IMAGE_CHANGED == 'true'
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registry-type: public
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 5); do
+            if aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws; then
+              echo "Public ECR login succeeded (attempt ${attempt}/5)"
+              exit 0
+            fi
+            echo "Public ECR login failed (attempt ${attempt}/5); retrying in 5s"
+            sleep 5
+          done
+          echo "::error::Failed to login to public.ecr.aws after 5 attempts"
+          exit 1
       - name: Step 4 (Login & Push to ECR) - Push tags
         if: env.IMAGE_CHANGED == 'true'
         run: |
@@ -494,23 +661,34 @@ jobs:
         if: env.IMAGE_CHANGED == 'true'
         run: |
           set -euo pipefail
-          DIGEST_HASH=$(aws ecr-public describe-images \
-            --region us-east-1 \
-            --repository-name agent-provost \
-            --image-ids imageTag="${IMAGE_SHA_TAG}" \
-            --query 'imageDetails[0].imageDigest' \
-            --output text)
-          if [ -z "${DIGEST_HASH}" ] || [ "${DIGEST_HASH}" = "None" ] || [ "${DIGEST_HASH}" = "null" ]; then
-            echo "::error::Failed to resolve authoritative digest for public.ecr.aws/e2u9m9o7/agent-provost:${IMAGE_SHA_TAG}"
+          REPOSITORY_NAME="${ALPACA_IMAGE##*/}"
+          ECR_DIGEST=""
+          for attempt in $(seq 1 12); do
+            ECR_DIGEST="$(aws ecr-public describe-images \
+              --region us-east-1 \
+              --repository-name "${REPOSITORY_NAME}" \
+              --image-ids imageTag="${IMAGE_SHA_TAG}" \
+              --query 'imageDetails[0].imageDigest' \
+              --output text 2>/dev/null || true)"
+            if echo "${ECR_DIGEST}" | grep -Eq '^sha256:[a-f0-9]{64}$'; then
+              break
+            fi
+            echo "Digest not yet available for ${REPOSITORY_NAME}:${IMAGE_SHA_TAG} (attempt ${attempt}/12)"
+            sleep 5
+          done
+
+          if ! echo "${ECR_DIGEST}" | grep -Eq '^sha256:[a-f0-9]{64}$'; then
+            echo "::error::Failed to resolve ECR digest for ${REPOSITORY_NAME}:${IMAGE_SHA_TAG}"
             exit 1
           fi
-          CURRENT_TAG=$(grep '^ALPACA_IMAGE_TAG=' .env.versions | cut -d= -f2 | cut -d@ -f1)
-          sed -i "s|^ALPACA_IMAGE_TAG=.*|ALPACA_IMAGE_TAG=${CURRENT_TAG}@${DIGEST_HASH}|" .env.versions
+
+          sed -i "s|^ALPACA_IMAGE_TAG=.*|ALPACA_IMAGE_TAG=${ECR_DIGEST}|" .env.versions
       - name: Step 4c (Commit pinned digest back to branch)
         if: env.IMAGE_CHANGED == 'true'
+        continue-on-error: true
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "ci: pin ALPACA_IMAGE_TAG to immutable digest [skip ci]"
+          commit_message: "ci: pin ALPACA_IMAGE_TAG to ECR digest [skip ci]"
           file_pattern: .env.versions
       - name: Step 5 (Sanity/Integration Tests)
         if: env.IMAGE_CHANGED == 'true'

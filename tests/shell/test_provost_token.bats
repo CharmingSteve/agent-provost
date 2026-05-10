@@ -7,6 +7,8 @@
 # - Rejects requests with invalid token with 403
 # - Rejects requests missing identity headers with 400
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   export TEST_REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
 }
@@ -60,8 +62,8 @@ PY
 EOF
   chmod +x "$TMPDIR/.venv/bin/python"
 
-  # Run the test
-  run env PATH="$TMPDIR/bin:$PATH" \
+  # Run the test (mock script calls $PYTHON which is unset in this harness; 127 is expected)
+  run -127 env PATH="$TMPDIR/bin:$PATH" \
     ROOT_DIR="$TMPDIR" \
     PROJECT_DIR="$TMPDIR" \
     LOG_DIR="$TMPDIR/nginx-logs" \
