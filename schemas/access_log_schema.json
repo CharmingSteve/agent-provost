@@ -90,9 +90,6 @@
     },
     "ec2_instance_id": {
       "type": "string"
-    },
-    "test_rogue_field": {
-      "type": "string"
     }
   }
 }
