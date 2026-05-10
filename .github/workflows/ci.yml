@@ -397,6 +397,7 @@ jobs:
           VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
           VERIFY_S3_REGION: "us-east-1"
           VERIFY_REQUIRE_S3: "true"
+          VERIFY_S3_POLL_SECONDS: "120"
           INSTANCE_ID: "ci-run-${{ github.run_id }}"
         run: |
           eval "$(sh bootstrap.sh runner)"
@@ -430,6 +431,7 @@ jobs:
           VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
           VERIFY_S3_REGION: "us-east-1"
           VERIFY_REQUIRE_S3: "true"
+          VERIFY_S3_POLL_SECONDS: "120"
           PROVOST_VERIFY_SKIP_EVIDENCE_CHECK: "false"
           PROVOST_VERIFY_ALLOW_MCP_PROBE_FAILURE: "false"
         run: ./verify_proxy_routing.sh
