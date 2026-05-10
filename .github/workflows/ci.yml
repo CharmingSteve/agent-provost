@@ -495,7 +495,7 @@ jobs:
           check-jsonschema --version
 
           echo "=== Validating Access Logs ==="
-          ACCESS_LOGS=$(find downloaded-logs -type f -name "*access*")
+          ACCESS_LOGS=$(find downloaded-logs -type f -path "*/access/*")
           if [ -z "$ACCESS_LOGS" ]; then
             echo "❌ ERROR: No access logs found in S3!"
             exit 1
@@ -506,7 +506,7 @@ jobs:
           done
 
           echo "=== Validating Error Logs ==="
-          ERROR_LOGS=$(find downloaded-logs -type f -name "*error*")
+          ERROR_LOGS=$(find downloaded-logs -type f -path "*/error/*")
           if [ -z "$ERROR_LOGS" ]; then
             echo "❌ ERROR: No error logs found in S3!"
             exit 1
