@@ -412,6 +412,10 @@ jobs:
         run: |
           mkdir -p logs/fluent-bit-storage/final
           chmod -R a+rwx logs/fluent-bit-storage
+      - name: Patch Fluent Bit S3 key format for CI run isolation
+        run: |
+          set -euo pipefail
+          sed -i 's|s3_key_format         /agent-provost/logs/|s3_key_format         /ci-run-${{ github.run_id }}/agent-provost/logs/|g' fluent-bit/conf.d/output-s3.conf
       - name: Run Integration Tests
         env:
           BOOTSTRAP_MODE: runner
