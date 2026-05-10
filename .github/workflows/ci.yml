@@ -356,7 +356,7 @@ jobs:
     name: Integration tests (end-to-end)
     runs-on: ubuntu-24.04-arm
     needs: [check-credentials, build-secure-push-test]
-    if: ${{ needs.check-credentials.outputs.enabled == 'true' }}
+    if: ${{ always() && needs.check-credentials.outputs.enabled == 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -393,8 +393,8 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: "us-east-1"
-          S3_BUCKET: "agent-provost-test-logs-863750994059-us-east-1-an"
-          VERIFY_S3_BUCKET: "agent-provost-test-logs-863750994059-us-east-1-an"
+          S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
+          VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
           VERIFY_S3_REGION: "us-east-1"
           INSTANCE_ID: "ci-run-${{ github.run_id }}"
         run: |
@@ -465,11 +465,11 @@ jobs:
           docker logs fluent-bit | tail -n 50 || true
 
           echo "=== Full S3 Bucket Contents ==="
-          aws s3 ls s3://agent-provost-test-logs-863750994059-us-east-1-an/ --recursive || true
+          aws s3 ls s3://ap-logs-863750994059-us-east-1-ci-test/ --recursive || true
 
           echo "=== Downloading Logs from CI S3 Bucket ==="
           mkdir -p downloaded-logs
-          aws s3 sync s3://agent-provost-test-logs-863750994059-us-east-1-an/ci-run-${{ github.run_id }}/ downloaded-logs/
+          aws s3 sync s3://ap-logs-863750994059-us-east-1-ci-test/ci-run-${{ github.run_id }}/ downloaded-logs/
 
           echo "=== Downloaded Files ==="
           find downloaded-logs -type f -exec ls -lh {} + || true
