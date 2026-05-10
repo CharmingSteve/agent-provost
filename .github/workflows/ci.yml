@@ -422,6 +422,11 @@ jobs:
       - name: Run Integration Tests
         env:
           BOOTSTRAP_MODE: runner
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
+          VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
+          VERIFY_S3_REGION: "us-east-1"
           PROVOST_VERIFY_SKIP_EVIDENCE_CHECK: "false"
           PROVOST_VERIFY_ALLOW_MCP_PROBE_FAILURE: "false"
         run: ./verify_proxy_routing.sh
