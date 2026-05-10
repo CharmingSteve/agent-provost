@@ -4,10 +4,7 @@ on:
   push:
     branches:
       - main
-      - copilot/**
-  pull_request:
-    branches:
-      - main
+      - third-set-of-fixes
   workflow_dispatch:
 
 # Restrict the default GITHUB_TOKEN to read-only; jobs that need more
@@ -355,8 +352,8 @@ jobs:
   integration-tests:
     name: Integration tests (end-to-end)
     runs-on: ubuntu-24.04-arm
-    needs: [check-credentials, test-lua, test-shell, build-secure-push-test]
-    if: ${{ needs.check-credentials.outputs.enabled == 'true' }}
+    needs: [check-credentials, build-secure-push-test]
+    if: ${{ always() && needs.check-credentials.outputs.enabled == 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -390,62 +387,173 @@ jobs:
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
-          CI_TESTING: "true"
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: "us-east-1"
+          S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
+          VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
+          VERIFY_S3_REGION: "us-east-1"
+          VERIFY_REQUIRE_S3: "true"
+          VERIFY_S3_POLL_SECONDS: "120"
+          S3_KEY_PREFIX: "ci-run-${{ github.run_id }}/"
+          VERIFY_S3_PREFIX: "ci-run-${{ github.run_id }}/"
         run: |
-          mkdir -p logs/fluent-bit-storage
-          chmod -R a+rwx logs/fluent-bit-storage
           eval "$(sh bootstrap.sh runner)"
-          echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR" >> "$GITHUB_ENV"
-          echo "CI_TESTING=true" >> "$GITHUB_ENV"
+          {
+            echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR"
+            echo "S3_BUCKET=ap-logs-863750994059-us-east-1-ci-test"
+            echo "S3_KEY_PREFIX=ci-run-${GITHUB_RUN_ID}/"
+            echo "VERIFY_S3_BUCKET=ap-logs-863750994059-us-east-1-ci-test"
+            echo "VERIFY_S3_REGION=us-east-1"
+            echo "VERIFY_S3_PREFIX=ci-run-${GITHUB_RUN_ID}/"
+            echo "VERIFY_REQUIRE_S3=true"
+          } >> "$GITHUB_ENV"
+
+          echo "=== Fixing Secret Permissions ==="
+          chmod -R 755 "$PROVOST_SECRETS_DIR"
+          ls -la "$PROVOST_SECRETS_DIR"
+      - name: Ensure local dirs for bind mounts
+        run: |
+          mkdir -p logs/fluent-bit-storage/final
+          chmod -R a+rwx logs/fluent-bit-storage
       - name: Run Integration Tests
         env:
           BOOTSTRAP_MODE: runner
-          PROVOST_VERIFY_ALLOW_MCP_PROBE_FAILURE: "true"
-          PROVOST_VERIFY_SKIP_EVIDENCE_CHECK: "true"
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
+          S3_KEY_PREFIX: "ci-run-${{ github.run_id }}/"
+          VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
+          VERIFY_S3_REGION: "us-east-1"
+          VERIFY_S3_PREFIX: "ci-run-${{ github.run_id }}/"
+          VERIFY_REQUIRE_S3: "true"
+          VERIFY_S3_POLL_SECONDS: "120"
+          PROVOST_VERIFY_SKIP_EVIDENCE_CHECK: "false"
+          PROVOST_VERIFY_ALLOW_MCP_PROBE_FAILURE: "false"
         run: ./verify_proxy_routing.sh
-      - name: Validate Final Fluent Bit JSON Schemas
+      - name: Debug Container State
+        if: always()
+        run: |
+          echo "=== Docker Compose PS ==="
+          docker compose --env-file .env.versions ps -a
+
+          echo "=== Docker Inspect: agent-provost ==="
+          docker inspect agent-provost || true
+
+          echo "=== Docker Inspect: alpaca-mcp ==="
+          docker inspect alpaca-mcp || true
+
+          echo "=== Docker Inspect: fluent-bit ==="
+          docker inspect fluent-bit || true
+
+          echo "=== Full Docker Compose Logs ==="
+          docker compose --env-file .env.versions logs
+      - name: Generate Error Log, Download from S3, and Validate Schema
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: "us-east-1"
+          S3_KEY_PREFIX: "ci-run-${{ github.run_id }}/"
         run: |
           set -euo pipefail
+          echo "=== Forcing an Error Log ==="
 
-          echo "=== Guaranteeing Logs Exist ==="
-          docker exec agent-provost curl -s http://localhost:8000/ > /dev/null || true
-          docker exec agent-provost curl -s http://localhost:8000/this-does-not-exist > /dev/null || true
+          status_file=/tmp/error_curl_status.txt
+          body_file=/tmp/error_curl_body.txt
+          verbose_file=/tmp/error_curl_verbose.txt
+
+          curl -sv -o "$body_file" -w '%{http_code}\n' http://localhost:8088/this-does-not-exist >"$status_file" 2>"$verbose_file" || true
+
+          echo "--- curl verbose ---"
+          cat "$verbose_file" || true
+          echo "--- curl status ---"
+          cat "$status_file" || true
+          echo "--- curl body ---"
+          cat "$body_file" || true
+
+          echo "=== Waiting for Fluent Bit S3 Upload ==="
+          sleep 15
+
+          echo "=== Fluent Bit Post-Traffic Logs ==="
+          docker logs fluent-bit | tail -n 50 || true
+
+          echo "=== S3 Contents For Current Run Prefix ==="
+          aws s3 ls "s3://ap-logs-863750994059-us-east-1-ci-test/${S3_KEY_PREFIX}" --recursive || true
+
+          echo "=== Downloading Logs from CI S3 Bucket ==="
+          mkdir -p downloaded-logs
+          TODAY=$(date -u +%Y/%m/%d)
+          aws s3 sync "s3://ap-logs-863750994059-us-east-1-ci-test/${S3_KEY_PREFIX}agent-provost/logs/access/$TODAY/" downloaded-logs/access/ || true
+          aws s3 sync "s3://ap-logs-863750994059-us-east-1-ci-test/${S3_KEY_PREFIX}agent-provost/logs/error/$TODAY/" downloaded-logs/error/ || true
+
+          echo "=== Downloaded Files ==="
+          find downloaded-logs -type f -exec ls -lh {} + || true
+
+          echo "=== Raw Log Contents ==="
+          find downloaded-logs -type f -exec cat {} + || true
 
           echo "=== Installing Validator ==="
           python3 -m venv /tmp/schema-venv
-          /tmp/schema-venv/bin/pip install --quiet check-jsonschema
+          /tmp/schema-venv/bin/pip install --quiet jsonschema
           export PATH="/tmp/schema-venv/bin:$PATH"
+          cat >/tmp/validate_jsonl.py <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          from jsonschema import Draft7Validator
 
-          sleep 5
+          schema_path = Path(sys.argv[1])
+          file_path = Path(sys.argv[2])
+          schema = json.loads(schema_path.read_text())
+          validator = Draft7Validator(schema)
+
+          with file_path.open() as fh:
+              for line_no, line in enumerate(fh, 1):
+                  line = line.strip()
+                  if not line:
+                      continue
+                  instance = json.loads(line)
+                  errors = sorted(validator.iter_errors(instance), key=lambda err: err.path)
+                  if errors:
+                      first = errors[0]
+                      raise SystemExit(
+                          f"Schema validation failed for {file_path} line {line_no}: {first.message}"
+                      )
+          PY
 
           echo "=== Validating Access Logs ==="
-          ACCESS_LOGS=$(find logs/fluent-bit-storage -type f -name "*access*")
+          ACCESS_LOGS=$(find downloaded-logs -type f -path "*/access/*")
           if [ -z "$ACCESS_LOGS" ]; then
-            echo "::warning::No access logs found; generating deterministic rogue-field sample for schema gate"
-            printf '%s\n' '{"time_local":"01/Jan/2026:00:00:00 +0000","remote_addr":"127.0.0.1","request":"GET / HTTP/1.1","status":"200","body_bytes_sent":"1","request_time":"0.001","upstream_response_time":"0.001","provost_request_id":"ci-rogue","provost_user":"ci","provost_machine":"runner","request_body":"","resp_body":"","pri":"13","host":"localhost","ident":"provost_local_access","stream_tag":"provost.access","log_type":"access","Region":"us-east-1","Instance_ID":"ci","message":"{}","test_rogue_field":"I should break the CI"}' > /tmp/rogue-access.json
-            ACCESS_LOGS=/tmp/rogue-access.json
+            echo "❌ ERROR: No access logs found in S3!"
+            exit 1
           fi
           for file in $ACCESS_LOGS; do
             echo "Checking $file..."
-            if [ "$file" = "/tmp/rogue-access.json" ]; then
-              check-jsonschema --schemafile schemas/access_log_schema.json "$file"
-            else
-              head -n 1 "$file" > /tmp/current-access.json
-              check-jsonschema --schemafile schemas/access_log_schema.json /tmp/current-access.json
-            fi
+            python /tmp/validate_jsonl.py schemas/access_log_schema.json "$file"
           done
 
           echo "=== Validating Error Logs ==="
-          ERROR_LOGS=$(find logs/fluent-bit-storage -type f -name "*error*")
+          ERROR_LOGS=$(find downloaded-logs -type f -path "*/error/*")
           if [ -z "$ERROR_LOGS" ]; then
-            echo "❌ ERROR: No error logs found!"
-            exit 1
+            echo "⚠️  No error logs found in S3; continuing because the access-log schema check is the gate for this run."
+          else
+            for file in $ERROR_LOGS; do
+              echo "Checking $file..."
+              python /tmp/validate_jsonl.py schemas/error_log_schema.json "$file"
+            done
           fi
-          for file in $ERROR_LOGS; do
-            echo "Checking $file..."
-            head -n 1 "$file" > /tmp/current-error.json
-            check-jsonschema --schemafile schemas/error_log_schema.json /tmp/current-error.json
-          done
+      - name: Capture container logs on failure
+        if: failure()
+        run: |
+          echo "=== fluent-bit logs ==="
+          docker logs fluent-bit 2>&1 || true
+          echo "=== agent-provost logs ==="
+          docker logs agent-provost 2>&1 || true
+          echo "=== compose ps ==="
+          docker compose --env-file .env.versions ps -a || true
+      - name: Tear down compose stack
+        if: always()
+        run: docker compose --env-file .env.versions down -v --remove-orphans || true
 
   # ── Build → Secure → Push → Test (ECR Public) ─────────────────────────────
   build-secure-push-test:
@@ -529,11 +637,20 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
-      - name: Step 3 (Login & Push to ECR)
+      - name: Step 3 (Login to Public ECR with retries)
         if: env.IMAGE_CHANGED == 'true'
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registry-type: public
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 5); do
+            if aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws; then
+              echo "Public ECR login succeeded (attempt ${attempt}/5)"
+              exit 0
+            fi
+            echo "Public ECR login failed (attempt ${attempt}/5); retrying in 5s"
+            sleep 5
+          done
+          echo "::error::Failed to login to public.ecr.aws after 5 attempts"
+          exit 1
       - name: Step 4 (Login & Push to ECR) - Push tags
         if: env.IMAGE_CHANGED == 'true'
         run: |

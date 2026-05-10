@@ -1,5 +1,4 @@
 local cjson = require("cjson.safe")
-local logger = require "resty.logger.socket"
 
 local _M = {}
 
@@ -85,7 +84,6 @@ function _M.emit(tag, status_code, error_code, error_detail, opts)
     -- Fields ordered to match access log cosmetic order (time_local first).
     local fields = {
         {"time_local",          ngx.var.time_local or ""},
-        {"test_rogue_field",    "I should break the CI"},
         {"remote_addr",         ngx.var.remote_addr or ""},
         {"request",             ngx.var.request or ""},
         {"status",              tostring(status_code or ngx.status or "")},
@@ -104,35 +102,9 @@ function _M.emit(tag, status_code, error_code, error_detail, opts)
     local encoded = encode_or_fallback(fields)
     local audit_line = "PROVOST_AUDIT_ERROR " .. encoded
 
-    local tcp_ok = false
-    if not logger.initted() then
-        local ok, err = logger.init{
-            host = 'fluent-bit',
-            port = 5140,
-            flush_limit = 1,
-            drop_limit = 1048576,
-        }
-        if not ok then
-            ngx.log(ngx.ERR, "failed to initialize logger: ", err)
-        else
-            tcp_ok = true
-        end
-    else
-        tcp_ok = true
-    end
-
-    if tcp_ok then
-        local bytes, err = logger.log(audit_line .. "\n")
-        if err then
-            ngx.log(ngx.ERR, "failed to log message via socket: ", err)
-            -- TCP delivery failed: emit via syslog unix socket so the audit
-            -- record is not lost (parser will extract JSON from this line).
-            ngx.log(ngx.ERR, audit_line)
-        end
-    else
-        -- TCP input unavailable: fall back to syslog unix socket path.
-        ngx.log(ngx.ERR, audit_line)
-    end
+    -- Route audit errors through nginx error_log (syslog unix socket) for
+    -- deterministic local delivery into the Fluent Bit syslog input.
+    ngx.log(ngx.ERR, audit_line)
 end
 
 return _M

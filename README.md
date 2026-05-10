@@ -189,6 +189,8 @@ Primary audit sink:
 
 - `s3://$S3_BUCKET/agent-provost/logs/%Y/%m/%d/%H/$UUID.json`
 
+Date/hour partitions follow the container local timezone (`TZ`). If `TZ=UTC`, partitions are UTC.
+
 Local durability buffer:
 
 - `./logs/fluent-bit-storage` (host)
@@ -212,6 +214,49 @@ Fluent Bit then parses/enriches and writes records to S3, including:
 - `Instance_ID`
 
 `provost_request_id` is created on the llm-to-mcp boundary when the inbound request is validated. If the client already supplied `X-Provost-Request-Id`, the proxy reuses it; otherwise it generates one from `request_id` or a timestamp-random fallback, stores the identity context in shared memory, and forwards the same id downstream so the mcp-to-api boundary can recover and log the same correlation id.
+
+### Log Schema Source of Truth and CI Validation
+
+The log payload shape is defined at emission time in two places:
+
+- Access log JSON fields are defined in `json_full` in [default.conf](default.conf).
+- Error/audit JSON fields are defined by the ordered field list in [lua/audit_error.lua](lua/audit_error.lua).
+
+Schema validation is executed in GitHub Actions from [.github/workflows/ci.yml](.github/workflows/ci.yml), inside the `integration-tests` job in the step named `Generate Error Log, Download from S3, and Validate Schema`.
+
+Current CI access-log validation loop:
+
+```bash
+               ACCESS_LOGS=$(find downloaded-logs -type f -path "*/access/*")
+               if [ -z "$ACCESS_LOGS" ]; then
+                  echo "❌ ERROR: No access logs found in S3!"
+                  exit 1
+               fi
+               for file in $ACCESS_LOGS; do
+                  echo "Checking $file..."
+                  python /tmp/validate_jsonl.py schemas/access_log_schema.json "$file"
+               done
+```
+
+Current CI error-log validation loop:
+
+```bash
+               ERROR_LOGS=$(find downloaded-logs -type f -path "*/error/*")
+               if [ -z "$ERROR_LOGS" ]; then
+                  echo "⚠️  No error logs found in S3; continuing because the access-log schema check is the gate for this run."
+               else
+                  for file in $ERROR_LOGS; do
+                     echo "Checking $file..."
+                     python /tmp/validate_jsonl.py schemas/error_log_schema.json "$file"
+                  done
+               fi
+```
+
+How it works:
+
+1. CI creates `/tmp/validate_jsonl.py` in that step and uses Python `jsonschema` (`Draft7Validator`) as the validation engine.
+2. Each log line is parsed as a JSON object and validated against the strict schemas in `schemas/access_log_schema.json` and `schemas/error_log_schema.json`.
+3. If any line contains an unexpected field (for example, a canary field like `test_rogue_field` when not in schema), the step fails with a schema validation error.
 
 ---
 
