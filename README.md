@@ -145,31 +145,6 @@ AWS will automatically provision a new instance with your updated `rules.json` a
 
 > 💬 **Need a custom rule set tailored to your firm's specific risk policy?** We build bespoke guardrail configurations for institutional clients. [Open an issue](https://github.com/CharmingSteve/agent-provost/issues) or start a [Discussion](https://github.com/CharmingSteve/agent-provost/discussions) to request a custom rule set.
 
-### Updating Rules Using an AI Assistant
-
-The rules system is designed to be self-describing. You can use any AI assistant (Claude, ChatGPT, Copilot, etc.) to safely generate an updated `rules.json` by giving it the following prompt.
-
-> ⚠️ **Important:** Always instruct your AI to edit `rules.json` only. Never allow it to modify `lua/rules_engine.lua` or `lua/rule_loader.lua` as part of a routine rule change — those files contain the evaluation logic and should only be changed by developers.
-
-**Sample AI Prompt for Rule Updates:**
-
-```
-Here is the current contents of my rules.json file: [PASTE YOUR rules.json HERE]
-
-Please update ONLY the rules.json file with the following changes:
-- [Describe your change, e.g. "Lower the MaxTradeNotional limit from 50000 to 10000"]
-- [e.g. "Add GME and TSLA to the blocked_tickers list"]
-- [e.g. "Enable the trading_window rule and set it to UTC hours 13 to 21"]
-
-Rules:
-1. Edit ONLY rules.json. Do not touch any Lua files, any config files, or any other file.
-2. Keep all existing rule keys. Only change the values I have specified.
-3. Validate that the output is valid JSON before returning it.
-4. Return the complete updated rules.json file contents only.
-```
-
-After updating, save the file on the host. OpenResty will pick up the new rules within 10 seconds — no restart required. See [RULES_ENGINE.md](RULES_ENGINE.md) for the full hot-reload architecture.
-
 ### 💡 We Need Your Ideas!
 We are expanding the safety suite. What other controls should we add?
 - [ ] Price-based slippage protection?
