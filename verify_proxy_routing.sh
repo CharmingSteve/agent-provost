@@ -133,11 +133,7 @@ check_s3_for_probe() {
 
     now_utc_date="$(date -u +%Y/%m/%d)"
     now_local_date="$(date +%Y/%m/%d)"
-    s3_key_prefix="${INSTANCE_ID:-}"
-    if [ -n "$s3_key_prefix" ]; then
-        s3_key_prefix="$s3_key_prefix/"
-    fi
-    prefixes="${s3_key_prefix}agent-provost/logs/access/$now_utc_date/ ${s3_key_prefix}agent-provost/logs/access/$now_local_date/"
+    prefixes="agent-provost/logs/access/$now_utc_date/ agent-provost/logs/access/$now_local_date/"
     deadline=$(( $(date +%s) + VERIFY_S3_POLL_SECONDS ))
     saw_access_denied=0
 
