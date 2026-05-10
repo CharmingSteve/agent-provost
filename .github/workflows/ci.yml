@@ -393,17 +393,17 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: "us-east-1"
-          S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
-          VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
+          S3_BUCKET: "agent-provost-test-logs-863750994059-us-east-1-an"
+          VERIFY_S3_BUCKET: "agent-provost-test-logs-863750994059-us-east-1-an"
           VERIFY_S3_REGION: "us-east-1"
           INSTANCE_ID: "ci-run-${{ github.run_id }}"
         run: |
           eval "$(sh bootstrap.sh runner)"
-          {
-            echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR"
-            echo "S3_BUCKET=ap-logs-863750994059-us-east-1-ci-test"
-            echo "INSTANCE_ID=ci-run-${{ github.run_id }}"
-          } >> "$GITHUB_ENV"
+          echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR" >> "$GITHUB_ENV"
+
+          echo "=== Fixing Secret Permissions ==="
+          chmod -R 755 "$PROVOST_SECRETS_DIR"
+          ls -la "$PROVOST_SECRETS_DIR"
       - name: Patch Fluent Bit S3 key format for CI run isolation
         run: |
           set -euo pipefail
@@ -416,53 +416,91 @@ jobs:
       - name: Run Integration Tests
         env:
           BOOTSTRAP_MODE: runner
-          PROVOST_VERIFY_ALLOW_MCP_PROBE_FAILURE: "true"
-          PROVOST_VERIFY_SKIP_EVIDENCE_CHECK: "true"
+          PROVOST_VERIFY_SKIP_EVIDENCE_CHECK: "false"
+          PROVOST_VERIFY_ALLOW_MCP_PROBE_FAILURE: "false"
         run: ./verify_proxy_routing.sh
-      - name: Download Logs from S3 and Validate Schema
+      - name: Debug Container State
+        if: always()
+        run: |
+          echo "=== Docker Compose PS ==="
+          docker compose --env-file .env.versions ps -a
+
+          echo "=== Docker Inspect: agent-provost ==="
+          docker inspect agent-provost || true
+
+          echo "=== Docker Inspect: alpaca-mcp ==="
+          docker inspect alpaca-mcp || true
+
+          echo "=== Docker Inspect: fluent-bit ==="
+          docker inspect fluent-bit || true
+
+          echo "=== Full Docker Compose Logs ==="
+          docker compose --env-file .env.versions logs
+      - name: Generate Error Log, Download from S3, and Validate Schema
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: "us-east-1"
-          VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
         run: |
           set -euo pipefail
-
           echo "=== Forcing an Error Log ==="
-          # The integration script tests happy paths. We force a 401 Unauthorized to guarantee an error log exists.
-          curl -s http://localhost:8088/ > /dev/null || true
+
+          status_file=/tmp/error_curl_status.txt
+          body_file=/tmp/error_curl_body.txt
+          verbose_file=/tmp/error_curl_verbose.txt
+
+          curl -sv -o "$body_file" -w '%{http_code}\n' http://localhost:8088/this-does-not-exist >"$status_file" 2>"$verbose_file" || true
+
+          echo "--- curl verbose ---"
+          cat "$verbose_file" || true
+          echo "--- curl status ---"
+          cat "$status_file" || true
+          echo "--- curl body ---"
+          cat "$body_file" || true
 
           echo "=== Waiting for Fluent Bit S3 Upload ==="
-          sleep 65
+          sleep 15
+
+          echo "=== Fluent Bit Post-Traffic Logs ==="
+          docker logs fluent-bit | tail -n 50 || true
+
+          echo "=== Full S3 Bucket Contents ==="
+          aws s3 ls s3://agent-provost-test-logs-863750994059-us-east-1-an/ --recursive || true
 
           echo "=== Downloading Logs from CI S3 Bucket ==="
           mkdir -p downloaded-logs
-          # Sync ONLY the logs from this specific CI run using the unique INSTANCE_ID prefix
-          aws s3 sync "s3://${VERIFY_S3_BUCKET}/ci-run-${{ github.run_id }}/" downloaded-logs/
+          aws s3 sync s3://agent-provost-test-logs-863750994059-us-east-1-an/ci-run-${{ github.run_id }}/ downloaded-logs/
+
+          echo "=== Downloaded Files ==="
+          find downloaded-logs -type f -exec ls -lh {} + || true
+
+          echo "=== Raw Log Contents ==="
+          find downloaded-logs -type f -exec cat {} + || true
 
           echo "=== Installing Validator ==="
           python3 -m venv /tmp/schema-venv
           /tmp/schema-venv/bin/pip install --quiet check-jsonschema
           export PATH="/tmp/schema-venv/bin:$PATH"
+          check-jsonschema --version
 
           echo "=== Validating Access Logs ==="
-          ACCESS_LOG_COUNT=$(find downloaded-logs -type f -name "*access*" | wc -l | tr -d ' ')
-          if [ "$ACCESS_LOG_COUNT" -eq 0 ]; then
+          ACCESS_LOGS=$(find downloaded-logs -type f -name "*access*")
+          if [ -z "$ACCESS_LOGS" ]; then
             echo "❌ ERROR: No access logs found in S3!"
             exit 1
           fi
-          find downloaded-logs -type f -name "*access*" -print0 | while IFS= read -r -d '' file; do
+          for file in $ACCESS_LOGS; do
             echo "Checking $file..."
             check-jsonschema --schemafile schemas/access_log_schema.json --jsonlines "$file"
           done
 
           echo "=== Validating Error Logs ==="
-          ERROR_LOG_COUNT=$(find downloaded-logs -type f -name "*error*" | wc -l | tr -d ' ')
-          if [ "$ERROR_LOG_COUNT" -eq 0 ]; then
+          ERROR_LOGS=$(find downloaded-logs -type f -name "*error*")
+          if [ -z "$ERROR_LOGS" ]; then
             echo "❌ ERROR: No error logs found in S3!"
             exit 1
           fi
-          find downloaded-logs -type f -name "*error*" -print0 | while IFS= read -r -d '' file; do
+          for file in $ERROR_LOGS; do
             echo "Checking $file..."
             check-jsonschema --schemafile schemas/error_log_schema.json --jsonlines "$file"
           done
