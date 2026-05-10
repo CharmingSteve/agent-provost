@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - third-set-of-fixes
   workflow_dispatch:
 
 # Restrict the default GITHUB_TOKEN to read-only; jobs that need more
