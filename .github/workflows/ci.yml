@@ -399,7 +399,13 @@ jobs:
           INSTANCE_ID: "ci-run-${{ github.run_id }}"
         run: |
           eval "$(sh bootstrap.sh runner)"
-          echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR" >> "$GITHUB_ENV"
+          {
+            echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR"
+            echo "S3_BUCKET=ap-logs-863750994059-us-east-1-ci-test"
+            echo "VERIFY_S3_BUCKET=ap-logs-863750994059-us-east-1-ci-test"
+            echo "VERIFY_S3_REGION=us-east-1"
+            echo "INSTANCE_ID=ci-run-${{ github.run_id }}"
+          } >> "$GITHUB_ENV"
 
           echo "=== Fixing Secret Permissions ==="
           chmod -R 755 "$PROVOST_SECRETS_DIR"
