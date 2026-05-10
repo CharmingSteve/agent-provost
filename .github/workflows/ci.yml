@@ -390,7 +390,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: "us-east-1"
-          S3_BUCKET: "ci-test"
+          S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
           VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
           VERIFY_S3_REGION: "us-east-1"
           VERIFY_REQUIRE_S3: "true"
@@ -399,7 +399,7 @@ jobs:
           eval "$(sh bootstrap.sh runner)"
           {
             echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR"
-            echo "S3_BUCKET=ci-test"
+            echo "S3_BUCKET=ap-logs-863750994059-us-east-1-ci-test"
             echo "VERIFY_S3_BUCKET=ap-logs-863750994059-us-east-1-ci-test"
             echo "VERIFY_S3_REGION=us-east-1"
             echo "VERIFY_REQUIRE_S3=true"
@@ -412,16 +412,12 @@ jobs:
         run: |
           mkdir -p logs/fluent-bit-storage/final
           chmod -R a+rwx logs/fluent-bit-storage
-      - name: Patch Fluent Bit S3 key format for CI run isolation
-        run: |
-          set -euo pipefail
-          sed -i 's|s3_key_format         /agent-provost/logs/|s3_key_format         /ci-run-${{ github.run_id }}/agent-provost/logs/|g' fluent-bit/conf.d/output-s3.conf
       - name: Run Integration Tests
         env:
           BOOTSTRAP_MODE: runner
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
-          S3_BUCKET: "ci-test"
+          S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
           VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
           VERIFY_S3_REGION: "us-east-1"
           VERIFY_REQUIRE_S3: "true"
@@ -479,7 +475,9 @@ jobs:
 
           echo "=== Downloading Logs from CI S3 Bucket ==="
           mkdir -p downloaded-logs
-          aws s3 sync s3://ap-logs-863750994059-us-east-1-ci-test/ci-run-${{ github.run_id }}/agent-provost/logs/ downloaded-logs/
+          TODAY=$(date -u +%Y/%m/%d)
+          aws s3 sync "s3://ap-logs-863750994059-us-east-1-ci-test/agent-provost/logs/access/$TODAY/" downloaded-logs/access/ || true
+          aws s3 sync "s3://ap-logs-863750994059-us-east-1-ci-test/agent-provost/logs/error/$TODAY/" downloaded-logs/error/ || true
 
           echo "=== Downloaded Files ==="
           find downloaded-logs -type f -exec ls -lh {} + || true
