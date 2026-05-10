@@ -57,6 +57,9 @@
     "error_detail": {
       "type": "string"
     },
+    "message": {
+      "type": "string"
+    },
     "stream_tag": {
       "type": "string"
     },
