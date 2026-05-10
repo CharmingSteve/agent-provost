@@ -121,7 +121,7 @@
   [ "$status" -eq 0 ]
   run grep -E 'Generate Traffic and Validate Final Fluent Bit JSON Schemas' .github/workflows/ci.yml
   [ "$status" -ne 0 ]
-  run grep -E 'name: Download Logs from S3 and Validate Schema' .github/workflows/ci.yml
+  run grep -E 'name: Generate Error Log, Download from S3, and Validate Schema' .github/workflows/ci.yml
   [ "$status" -eq 0 ]
   run grep -E 'check-jsonschema' .github/workflows/ci.yml
   [ "$status" -eq 0 ]

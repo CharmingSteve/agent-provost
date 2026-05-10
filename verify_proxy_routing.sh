@@ -28,6 +28,12 @@ else
     echo "[verify] bootstrap.sh not found; skipping secrets staging"
 fi
 
+# OpenResty workers run as an unprivileged user in the container and must be able
+# to read mounted secret files for token validation during probe requests.
+if [ -n "${PROVOST_SECRETS_DIR:-}" ] && [ -d "$PROVOST_SECRETS_DIR" ]; then
+    chmod -R 755 "$PROVOST_SECRETS_DIR" || true
+fi
+
 # Debug: check if AWS vars are set
 echo "[verify] DEBUG: AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:+<set>}"
 echo "[verify] DEBUG: AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:+<set>}"
