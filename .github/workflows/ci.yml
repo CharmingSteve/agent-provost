@@ -475,7 +475,7 @@ jobs:
 
           echo "=== Downloading Logs from CI S3 Bucket ==="
           mkdir -p downloaded-logs
-          aws s3 sync s3://ap-logs-863750994059-us-east-1-ci-test/agent-provost/logs/ downloaded-logs/
+          aws s3 sync s3://ap-logs-863750994059-us-east-1-ci-test/ci-run-${{ github.run_id }}/agent-provost/logs/ downloaded-logs/
 
           echo "=== Downloaded Files ==="
           find downloaded-logs -type f -exec ls -lh {} + || true
