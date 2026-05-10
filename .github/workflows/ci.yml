@@ -395,13 +395,17 @@ jobs:
           VERIFY_S3_REGION: "us-east-1"
           VERIFY_REQUIRE_S3: "true"
           VERIFY_S3_POLL_SECONDS: "120"
+          S3_KEY_PREFIX: "ci-run-${{ github.run_id }}/"
+          VERIFY_S3_PREFIX: "ci-run-${{ github.run_id }}/"
         run: |
           eval "$(sh bootstrap.sh runner)"
           {
             echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR"
             echo "S3_BUCKET=ap-logs-863750994059-us-east-1-ci-test"
+            echo "S3_KEY_PREFIX=ci-run-${GITHUB_RUN_ID}/"
             echo "VERIFY_S3_BUCKET=ap-logs-863750994059-us-east-1-ci-test"
             echo "VERIFY_S3_REGION=us-east-1"
+            echo "VERIFY_S3_PREFIX=ci-run-${GITHUB_RUN_ID}/"
             echo "VERIFY_REQUIRE_S3=true"
           } >> "$GITHUB_ENV"
 
@@ -418,8 +422,10 @@ jobs:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
+          S3_KEY_PREFIX: "ci-run-${{ github.run_id }}/"
           VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
           VERIFY_S3_REGION: "us-east-1"
+          VERIFY_S3_PREFIX: "ci-run-${{ github.run_id }}/"
           VERIFY_REQUIRE_S3: "true"
           VERIFY_S3_POLL_SECONDS: "120"
           PROVOST_VERIFY_SKIP_EVIDENCE_CHECK: "false"
@@ -447,6 +453,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: "us-east-1"
+          S3_KEY_PREFIX: "ci-run-${{ github.run_id }}/"
         run: |
           set -euo pipefail
           echo "=== Forcing an Error Log ==="
@@ -470,14 +477,14 @@ jobs:
           echo "=== Fluent Bit Post-Traffic Logs ==="
           docker logs fluent-bit | tail -n 50 || true
 
-          echo "=== Full S3 Bucket Contents ==="
-          aws s3 ls s3://ap-logs-863750994059-us-east-1-ci-test/ --recursive || true
+          echo "=== S3 Contents For Current Run Prefix ==="
+          aws s3 ls "s3://ap-logs-863750994059-us-east-1-ci-test/${S3_KEY_PREFIX}" --recursive || true
 
           echo "=== Downloading Logs from CI S3 Bucket ==="
           mkdir -p downloaded-logs
           TODAY=$(date -u +%Y/%m/%d)
-          aws s3 sync "s3://ap-logs-863750994059-us-east-1-ci-test/agent-provost/logs/access/$TODAY/" downloaded-logs/access/ || true
-          aws s3 sync "s3://ap-logs-863750994059-us-east-1-ci-test/agent-provost/logs/error/$TODAY/" downloaded-logs/error/ || true
+          aws s3 sync "s3://ap-logs-863750994059-us-east-1-ci-test/${S3_KEY_PREFIX}agent-provost/logs/access/$TODAY/" downloaded-logs/access/ || true
+          aws s3 sync "s3://ap-logs-863750994059-us-east-1-ci-test/${S3_KEY_PREFIX}agent-provost/logs/error/$TODAY/" downloaded-logs/error/ || true
 
           echo "=== Downloaded Files ==="
           find downloaded-logs -type f -exec ls -lh {} + || true

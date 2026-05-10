@@ -12,6 +12,13 @@ VERIFY_REQUIRE_S3="${VERIFY_REQUIRE_S3:-auto}"
 VERIFY_S3_POLL_SECONDS="${VERIFY_S3_POLL_SECONDS:-120}"
 VERIFY_S3_BUCKET="${VERIFY_S3_BUCKET:-${S3_BUCKET:-}}"
 VERIFY_S3_REGION="${VERIFY_S3_REGION:-${AWS_REGION:-}}"
+VERIFY_S3_PREFIX="${VERIFY_S3_PREFIX:-${S3_KEY_PREFIX:-}}"
+
+case "$VERIFY_S3_PREFIX" in
+    "") ;;
+    */) ;;
+    *) VERIFY_S3_PREFIX="${VERIFY_S3_PREFIX}/" ;;
+esac
 
 if [ ! -x "$PYTHON_BIN" ]; then
     PYTHON_BIN="python3"
@@ -133,7 +140,8 @@ check_s3_for_probe() {
 
     now_utc_date="$(date -u +%Y/%m/%d)"
     now_local_date="$(date +%Y/%m/%d)"
-    prefixes="agent-provost/logs/access/$now_utc_date/ agent-provost/logs/access/$now_local_date/"
+    s3_access_base="${VERIFY_S3_PREFIX}agent-provost/logs/access/"
+    prefixes="${s3_access_base}$now_utc_date/ ${s3_access_base}$now_local_date/"
     deadline=$(( $(date +%s) + VERIFY_S3_POLL_SECONDS ))
     saw_access_denied=0
 
@@ -181,7 +189,7 @@ check_s3_for_probe() {
                 probe_in_buffer=1
             fi
 
-            if "$DOCKER_BIN" logs --since "$PROBE_START_RFC3339" fluent-bit 2>&1 | grep -q "Successfully uploaded object /agent-provost/logs/access/"; then
+            if "$DOCKER_BIN" logs --since "$PROBE_START_RFC3339" fluent-bit 2>&1 | grep -qE "Successfully uploaded object /.*/agent-provost/logs/access/|Successfully uploaded object /agent-provost/logs/access/"; then
                 uploaded_since_probe=1
             fi
 

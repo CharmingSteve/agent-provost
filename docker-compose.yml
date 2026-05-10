@@ -45,6 +45,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
       S3_BUCKET: ${S3_BUCKET:-agent-provost-local}
+      S3_KEY_PREFIX: ${S3_KEY_PREFIX:-}
       INSTANCE_ID: ${INSTANCE_ID:-local-dev}
       TZ: ${TZ:-Asia/Jerusalem}
       CI_TESTING: ${CI_TESTING:-false}
