@@ -390,7 +390,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: "us-east-1"
-          S3_BUCKET: "ci-test"
+          S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
           VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
           VERIFY_S3_REGION: "us-east-1"
           VERIFY_REQUIRE_S3: "true"
@@ -399,7 +399,7 @@ jobs:
           eval "$(sh bootstrap.sh runner)"
           {
             echo "PROVOST_SECRETS_DIR=$PROVOST_SECRETS_DIR"
-            echo "S3_BUCKET=ci-test"
+            echo "S3_BUCKET=ap-logs-863750994059-us-east-1-ci-test"
             echo "VERIFY_S3_BUCKET=ap-logs-863750994059-us-east-1-ci-test"
             echo "VERIFY_S3_REGION=us-east-1"
             echo "VERIFY_REQUIRE_S3=true"
@@ -417,7 +417,7 @@ jobs:
           BOOTSTRAP_MODE: runner
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
-          S3_BUCKET: "ci-test"
+          S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
           VERIFY_S3_BUCKET: "ap-logs-863750994059-us-east-1-ci-test"
           VERIFY_S3_REGION: "us-east-1"
           VERIFY_REQUIRE_S3: "true"
