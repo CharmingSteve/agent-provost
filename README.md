@@ -153,13 +153,13 @@ To run the upgrade on your EC2 instance, you must execute it as the `provost` us
 
 ```bash
 # 1. Switch to the provost service account
-sudo su - provost
+sudo -i
 
 # 2. Navigate to the installation directory
 cd /opt/agent-provost
 
 # 3. Run the upgrade script (replace 'main' with your target branch if needed)
-./scripts/provost-upgrade.sh main
+./scripts/provost-upgrade.sh <NEW-BRANCH-NAME>
 ```
 
 The script will automatically stash local changes, fetch the new branch, pull the latest pinned Docker images, and restart the stack with zero downtime. If the upgrade fails, the script output provides a one-line command to restore your previous Docker images from the `backups/` directory.
