@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - third-set-of-fixes
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 # Restrict the default GITHUB_TOKEN to read-only; jobs that need more
