@@ -142,9 +142,11 @@ jobs:
           ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Fetch latest workflow-updated branch state
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           git fetch origin
-          git reset --hard origin/${{ github.head_ref || github.ref_name }}
+          git reset --hard "origin/${BRANCH}"
 
       - name: Stage dummy secrets for compose runtime
 
@@ -364,9 +366,11 @@ jobs:
         with:
           ref: ${{ github.head_ref || github.ref_name }}
       - name: Fetch latest workflow-updated branch state
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           git fetch origin
-          git reset --hard origin/${{ github.head_ref || github.ref_name }}
+          git reset --hard "origin/${BRANCH}"
       - name: Authenticate to AWS for ECR Public pulls
         uses: aws-actions/configure-aws-credentials@v4
         with:
