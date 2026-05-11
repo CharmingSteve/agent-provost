@@ -13,6 +13,13 @@
       "limit": 50000
     }
   },
+  "inbound_request_rate_limit": {
+    "enabled": true,
+    "description": "Limit inbound request rate at the proxy boundary. Set rpm to 0 to disable.",
+    "params": {
+      "rpm": 60
+    }
+  },
   "cumulative_trade_notional": {
     "enabled": true,
     "description": "Block cumulative dollar exposure across multiple orders within a short rolling window.",

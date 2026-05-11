@@ -14,6 +14,13 @@ cd "$PROJECT_ROOT"
 
 # Load .env.versions (digests) always.
 # Load .env (local dev creds) if it exists, don't error if missing (for CI/prod).
+# Source .env into shell environment so credentials are available to export.
+if [[ -f .env ]]; then
+	set -a
+	source .env
+	set +a
+fi
+
 # Explicitly export AWS/S3 env vars to ensure docker compose picks them up from shell.
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-}"
