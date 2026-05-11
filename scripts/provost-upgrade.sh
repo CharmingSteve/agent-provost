@@ -87,6 +87,14 @@ fi
 echo "[upgrade] Pulling pinned images"
 ./scripts/provost-compose.sh pull
 
+echo "[upgrade] Loading secrets from /run/secrets"
+if [ -d "/run/secrets" ]; then
+    [ -f "/run/secrets/alpaca_api_key" ] && export ALPACA_API_KEY=$(cat /run/secrets/alpaca_api_key)
+    [ -f "/run/secrets/alpaca_secret_key" ] && export ALPACA_SECRET_KEY=$(cat /run/secrets/alpaca_secret_key)
+    [ -f "/run/secrets/s3_bucket" ] && export S3_BUCKET=$(cat /run/secrets/s3_bucket)
+    [ -f "/run/secrets/aws_region" ] && export AWS_REGION=$(cat /run/secrets/aws_region)
+fi
+
 echo "[upgrade] Restarting stack"
 ./scripts/provost-compose.sh up -d --remove-orphans
 
