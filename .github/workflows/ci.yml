@@ -141,6 +141,9 @@ jobs:
         with:
           ref: ${{ github.head_ref || github.ref_name }}
 
+      - name: Pull latest workflow-updated branch state
+        run: git pull --ff-only origin "${{ github.head_ref || github.ref_name }}"
+
       - name: Stage dummy secrets for compose runtime
 
         run: |
@@ -352,12 +355,14 @@ jobs:
   integration-tests:
     name: Integration tests (end-to-end)
     runs-on: ubuntu-24.04-arm
-    needs: [check-credentials, build-secure-push-test]
+    needs: [check-credentials, test-lua, test-shell, build-secure-push-test]
     if: ${{ always() && needs.check-credentials.outputs.enabled == 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref_name }}
+      - name: Pull latest workflow-updated branch state
+        run: git pull --ff-only origin "${{ github.head_ref || github.ref_name }}"
       - name: Authenticate to AWS for ECR Public pulls
         uses: aws-actions/configure-aws-credentials@v4
         with:
