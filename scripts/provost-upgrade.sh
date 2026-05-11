@@ -27,6 +27,17 @@ if [ -f .env.versions ]; then
     
     for img_var in OPENRESTY_IMAGE BASE_PYTHON_IMAGE ALPACA_IMAGE FLUENT_BIT_IMAGE; do
         img_val="${!img_var:-}"
+        
+        # Special handling for ALPACA_IMAGE which uses a separate TAG variable
+        if [ "$img_var" = "ALPACA_IMAGE" ] && [ -n "${ALPACA_IMAGE_TAG:-}" ]; then
+            # Check if the tag is a digest (starts with sha256:) or a regular tag
+            if [[ "$ALPACA_IMAGE_TAG" == sha256:* ]]; then
+                img_val="${img_val}@${ALPACA_IMAGE_TAG}"
+            else
+                img_val="${img_val}:${ALPACA_IMAGE_TAG}"
+            fi
+        fi
+
         if [ -n "$img_val" ] && docker image inspect "$img_val" >/dev/null 2>&1; then
             safe_name=$(echo "$img_var" | tr '[:upper:]' '[:lower:]')
             echo "[upgrade] Saving local image for $img_var -> $BACKUP_DIR/${safe_name}.tar.gz"
