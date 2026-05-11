@@ -88,6 +88,7 @@ echo "[upgrade] Pulling pinned images"
 ./scripts/provost-compose.sh pull
 
 echo "[upgrade] Restarting stack"
+export PROVOST_SECRETS_DIR="/run/secrets"
 ./scripts/provost-compose.sh up -d --remove-orphans
 
 echo ""
