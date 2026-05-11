@@ -17,6 +17,7 @@ cd "$PROJECT_ROOT"
 # Source .env into shell environment so credentials are available to export.
 if [[ -f .env ]]; then
 	set -a
+	# shellcheck disable=SC1091
 	source .env
 	set +a
 fi

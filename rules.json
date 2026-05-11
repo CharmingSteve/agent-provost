@@ -17,7 +17,7 @@
     "enabled": true,
     "description": "Limit inbound request rate at the proxy boundary. Set rpm to 0 to disable.",
     "params": {
-      "rpm": 60
+      "rpm": 0
     }
   },
   "cumulative_trade_notional": {
