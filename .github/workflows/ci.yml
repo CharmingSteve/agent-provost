@@ -221,11 +221,31 @@ jobs:
           set +e
           trivy fs --exit-code 1 --severity CRITICAL,HIGH .
           echo "TRIVY_FS_STATUS=$?" >> "$GITHUB_ENV"
+      - name: Authenticate to AWS for ECR Public pulls
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Login to ECR Public
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
       - name: Pull and build images for scan
         run: |
           set -euo pipefail
           docker compose --env-file .env.versions -f docker-compose.yml pull agent-provost
-          docker pull "${FLUENT_BIT_IMAGE}"
+          for attempt in 1 2 3 4 5; do
+            if docker pull "${FLUENT_BIT_IMAGE}"; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "::error::docker pull ${FLUENT_BIT_IMAGE} failed after 5 attempts"
+              exit 1
+            fi
+            echo "::warning::docker pull ${FLUENT_BIT_IMAGE} failed (attempt ${attempt}/5); retrying"
+            sleep 5
+          done
           docker build -f alpaca-mcp.Dockerfile --build-arg BASE_PYTHON_IMAGE="${BASE_PYTHON_IMAGE}" -t agent-provost-alpaca-mcp:"${TRIVY_BUILD_TAG}" .
       - name: Trivy image scan (agent-provost)
         run: |
@@ -650,20 +670,11 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
-      - name: Step 3 (Login to Public ECR with retries)
+      - name: Step 3 (Login to Public ECR)
         if: env.IMAGE_CHANGED == 'true'
-        run: |
-          set -euo pipefail
-          for attempt in $(seq 1 5); do
-            if aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws; then
-              echo "Public ECR login succeeded (attempt ${attempt}/5)"
-              exit 0
-            fi
-            echo "Public ECR login failed (attempt ${attempt}/5); retrying in 5s"
-            sleep 5
-          done
-          echo "::error::Failed to login to public.ecr.aws after 5 attempts"
-          exit 1
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
       - name: Step 4 (Login & Push to ECR) - Push tags
         if: env.IMAGE_CHANGED == 'true'
         run: |

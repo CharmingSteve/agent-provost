@@ -90,10 +90,22 @@ echo "[upgrade] Pulling pinned images"
 
 echo "[upgrade] Loading secrets from /run/secrets"
 if [ -d "/run/secrets" ]; then
-    [ -f "/run/secrets/alpaca_api_key" ] && export ALPACA_API_KEY=$(cat /run/secrets/alpaca_api_key)
-    [ -f "/run/secrets/alpaca_secret_key" ] && export ALPACA_SECRET_KEY=$(cat /run/secrets/alpaca_secret_key)
-    [ -f "/run/secrets/s3_bucket" ] && export S3_BUCKET=$(cat /run/secrets/s3_bucket)
-    [ -f "/run/secrets/aws_region" ] && export AWS_REGION=$(cat /run/secrets/aws_region)
+    if [ -f "/run/secrets/alpaca_api_key" ]; then
+        ALPACA_API_KEY=$(cat /run/secrets/alpaca_api_key)
+        export ALPACA_API_KEY
+    fi
+    if [ -f "/run/secrets/alpaca_secret_key" ]; then
+        ALPACA_SECRET_KEY=$(cat /run/secrets/alpaca_secret_key)
+        export ALPACA_SECRET_KEY
+    fi
+    if [ -f "/run/secrets/s3_bucket" ]; then
+        S3_BUCKET=$(cat /run/secrets/s3_bucket)
+        export S3_BUCKET
+    fi
+    if [ -f "/run/secrets/aws_region" ]; then
+        AWS_REGION=$(cat /run/secrets/aws_region)
+        export AWS_REGION
+    fi
 fi
 
 echo "[upgrade] Restarting stack"
