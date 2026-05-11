@@ -39,7 +39,7 @@
     "enabled": true,
     "description": "Allow trading only for listed asset classes.",
     "params": {
-      "classes": ["us_equity", "crypto", "us_option"]
+      "classes": ["us_equity", "us_option"]
     }
   },
   "blocked_tool_names": {
