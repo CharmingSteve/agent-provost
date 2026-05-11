@@ -182,6 +182,13 @@ case "$MODE" in
     create_secrets_dir ec2
     create_run_dir ec2
 
+    # Ensure directories exist
+    mkdir -p "$PROVOST_SECRETS_DIR" "$PROVOST_RUN_DIR"
+
+    # Gracefully attempt to secure directories (CloudFormation handles this on boot)
+    chmod 700 "$PROVOST_SECRETS_DIR" 2>/dev/null || true
+    chmod 755 "$PROVOST_RUN_DIR" 2>/dev/null || true
+
     SECRET_NAME="${PROVOST_SECRET_NAME:-agent-provost/alpaca}"
     REGION="${AWS_REGION:-us-east-1}"
     SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$SECRET_NAME" --region "$REGION" --query SecretString --output text 2>&1)

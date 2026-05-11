@@ -50,6 +50,7 @@ mypy_cache/
 local_settings.py
 .secrets/
 .provost-run/
+backups/
 
 # Package managers
 node_modules/
