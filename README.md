@@ -145,6 +145,25 @@ AWS will automatically provision a new instance with your updated `rules.json` a
 
 > 💬 **Need a custom rule set tailored to your firm's specific risk policy?** We build bespoke guardrail configurations for institutional clients. [Open an issue](https://github.com/CharmingSteve/agent-provost/issues) or start a [Discussion](https://github.com/CharmingSteve/agent-provost/discussions) to request a custom rule set.
 
+### Upgrading the Agent Provost Stack
+
+If you need to deploy a hotfix, update to a new version, or switch to a custom customer branch, you can use the built-in upgrade script. This script safely backs up your current configuration and Docker images before pulling the new code.
+
+To run the upgrade on your EC2 instance, you must execute it as the `provost` user:
+
+```bash
+# 1. Switch to the provost service account
+sudo -i
+
+# 2. Navigate to the installation directory
+cd /opt/agent-provost
+
+# 3. Run the upgrade script (replace 'main' with your target branch if needed)
+./scripts/provost-upgrade.sh <NEW-BRANCH-NAME>
+```
+
+The script will automatically stash local changes, fetch the new branch, pull the latest pinned Docker images, and restart the stack with zero downtime. If the upgrade fails, the script output provides a one-line command to restore your previous Docker images from the `backups/` directory.
+
 ### 💡 We Need Your Ideas!
 We are expanding the safety suite. What other controls should we add?
 - [ ] Price-based slippage protection?
