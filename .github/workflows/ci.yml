@@ -8,6 +8,8 @@ on:
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - .env.versions
   workflow_dispatch:
 
 # Restrict the default GITHUB_TOKEN to read-only; jobs that need more
