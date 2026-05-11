@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+git config --global --add safe.directory /opt/agent-provost
 
 # Ensure we are in the repo root
 if [ ! -f "bootstrap.sh" ]; then
@@ -96,6 +97,7 @@ if [ -d "/run/secrets" ]; then
 fi
 
 echo "[upgrade] Restarting stack"
+export PROVOST_SECRETS_DIR="/run/secrets"
 ./scripts/provost-compose.sh up -d --remove-orphans
 
 echo ""
