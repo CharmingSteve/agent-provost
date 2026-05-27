@@ -21,6 +21,17 @@ describe("rate_limit module", function()
         return store[key]
     end
 
+    local function shared_incr(_, key, value, init, _init_ttl)
+        if type(store[key]) ~= "number" then
+            if init == nil then
+                return nil, "not found"
+            end
+            store[key] = init
+        end
+        store[key] = store[key] + value
+        return store[key]
+    end
+
     before_each(function()
         original_ngx = _G.ngx
         now_value = 100
@@ -34,6 +45,7 @@ describe("rate_limit module", function()
                 rate_limit = {
                     set = shared_set,
                     get = shared_get,
+                    incr = shared_incr,
                 }
             }
         }
@@ -87,6 +99,42 @@ describe("rate_limit module", function()
         rate_limit.enter_cooldown(60)
         now_value = 161
         assert.is_false(rate_limit.is_cooldown_active())
+    end)
+
+    it("blocks requests above configured inbound rpm", function()
+        local rate_limit = require("rate_limit")
+        local rules = {
+            inbound_request_rate_limit = {
+                enabled = true,
+                params = { rpm = 2 }
+            }
+        }
+
+        assert.is_false(rate_limit.is_inbound_request_rate_exceeded(rules, "client-a"))
+        assert.is_false(rate_limit.is_inbound_request_rate_exceeded(rules, "client-a"))
+        assert.is_true(rate_limit.is_inbound_request_rate_exceeded(rules, "client-a"))
+    end)
+
+    it("does not enforce inbound limiter when rpm is zero", function()
+        local rate_limit = require("rate_limit")
+        local rules = {
+            inbound_request_rate_limit = {
+                enabled = true,
+                params = { rpm = 0 }
+            }
+        }
+
+        assert.is_false(rate_limit.is_inbound_request_rate_exceeded(rules, "client-b"))
+        assert.is_false(rate_limit.is_inbound_request_rate_exceeded(rules, "client-b"))
+        assert.is_false(rate_limit.is_inbound_request_rate_exceeded(rules, "client-b"))
+    end)
+
+    it("fails open for missing or invalid inbound limiter config", function()
+        local rate_limit = require("rate_limit")
+        assert.is_false(rate_limit.is_inbound_request_rate_exceeded({}, "client-c"))
+        assert.is_false(rate_limit.is_inbound_request_rate_exceeded({
+            inbound_request_rate_limit = { enabled = true, params = { rpm = "bad" } }
+        }, "client-c"))
     end)
 
 end)

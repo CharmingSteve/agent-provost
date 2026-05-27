@@ -69,6 +69,11 @@ printf '%s\n' "${SECRET_STRING}" | jq '
       description: "Block trades whose dollar notional value exceeds the configured limit.",
       params: { limit: (.MaxTradeNotional | to_num) }
     },
+    inbound_request_rate_limit: {
+      enabled: true,
+      description: "Limit inbound request rate at the proxy boundary. Set rpm to 0 to disable.",
+      params: { rpm: (.RateLimitRPM | to_num) }
+    },
     allowed_symbols: {
       enabled: true,
       description: "Allow trading only for symbols in this list.",

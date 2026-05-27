@@ -6,6 +6,7 @@ local _M = {}
 local LOW_REMAINING_THRESHOLD = 10
 local DEFAULT_COOLDOWN_SECONDS = 60
 local REMAINING_TTL_SECONDS = 300
+local INBOUND_WINDOW_SECONDS = 60
 
 local function dict()
     return ngx.shared.rate_limit
@@ -53,6 +54,61 @@ function _M.is_cooldown_active()
         return false
     end
     return ngx.now() < until_epoch
+end
+
+function _M.get_inbound_rpm(rules)
+    if type(rules) ~= "table" then
+        return nil
+    end
+
+    local rule = rules.inbound_request_rate_limit
+    if type(rule) ~= "table" or rule.enabled ~= true then
+        return nil
+    end
+
+    local params = rule.params
+    if type(params) ~= "table" then
+        return nil
+    end
+
+    local rpm = to_number(params.rpm)
+    if not rpm or rpm <= 0 then
+        return nil
+    end
+
+    return math.floor(rpm)
+end
+
+function _M.is_inbound_request_rate_exceeded(rules, client_key)
+    local rpm = _M.get_inbound_rpm(rules)
+    if not rpm then
+        return false, nil
+    end
+
+    local key = client_key
+    if type(key) ~= "string" or key == "" then
+        key = "anonymous"
+    end
+
+    local window = math.floor(ngx.now() / INBOUND_WINDOW_SECONDS)
+    local redis_key = "inbound_rpm:" .. key .. ":" .. window
+    local ttl = INBOUND_WINDOW_SECONDS + 1
+
+    local current
+    local d = dict()
+    if d.incr then
+        local value, err = d:incr(redis_key, 1, 0, ttl)
+        if not value then
+            return false, rpm, err
+        end
+        current = value
+    else
+        current = to_number(d:get(redis_key)) or 0
+        current = current + 1
+        d:set(redis_key, current, ttl)
+    end
+
+    return current > rpm, rpm
 end
 
 return _M

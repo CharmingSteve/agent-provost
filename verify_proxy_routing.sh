@@ -180,27 +180,30 @@ check_s3_for_probe() {
 
     if [ "$saw_access_denied" -eq 1 ]; then
         echo "[verify] WARN: S3 list denied; validating via put-only evidence"
-        deadline=$(( $(date +%s) + VERIFY_S3_POLL_SECONDS ))
-        while [ "$(date +%s)" -lt "$deadline" ]; do
-            probe_in_buffer=0
-            uploaded_since_probe=0
-
-            if [ -f "$FLUENT_BUFFER_DIR/access.log" ] && grep -q "$probe_id" "$FLUENT_BUFFER_DIR/access.log"; then
-                probe_in_buffer=1
-            fi
-
-            if "$DOCKER_BIN" logs --since "$PROBE_START_RFC3339" fluent-bit 2>&1 | grep -qE "Successfully uploaded object /.*/agent-provost/logs/access/|Successfully uploaded object /agent-provost/logs/access/"; then
-                uploaded_since_probe=1
-            fi
-
-            if [ "$probe_in_buffer" -eq 1 ] && [ "$uploaded_since_probe" -eq 1 ]; then
-                echo "[verify] validated $probe_label in buffer and confirmed S3 upload event"
-                return 0
-            fi
-
-            sleep 3
-        done
+    else
+        echo "[verify] WARN: probe lookup timed out; validating via put-only evidence"
     fi
+
+    deadline=$(( $(date +%s) + VERIFY_S3_POLL_SECONDS ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        probe_in_buffer=0
+        uploaded_since_probe=0
+
+        if [ -f "$FLUENT_BUFFER_DIR/access.log" ] && grep -q "$probe_id" "$FLUENT_BUFFER_DIR/access.log"; then
+            probe_in_buffer=1
+        fi
+
+        if "$DOCKER_BIN" logs --since "$PROBE_START_RFC3339" fluent-bit 2>&1 | grep -qE "Successfully uploaded object /.*/agent-provost/logs/access/|Successfully uploaded object /agent-provost/logs/access/"; then
+            uploaded_since_probe=1
+        fi
+
+        if [ "$probe_in_buffer" -eq 1 ] && [ "$uploaded_since_probe" -eq 1 ]; then
+            echo "[verify] validated $probe_label in buffer and confirmed S3 upload event"
+            return 0
+        fi
+
+        sleep 3
+    done
 
     echo "[verify] FAIL: $probe_label not found in S3 within timeout"
     return 1

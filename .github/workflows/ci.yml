@@ -520,9 +520,8 @@ jobs:
 
           echo "=== Downloading Logs from CI S3 Bucket ==="
           mkdir -p downloaded-logs
-          TODAY=$(date -u +%Y/%m/%d)
-          aws s3 sync "s3://ap-logs-863750994059-us-east-1-ci-test/${S3_KEY_PREFIX}agent-provost/logs/access/$TODAY/" downloaded-logs/access/ || true
-          aws s3 sync "s3://ap-logs-863750994059-us-east-1-ci-test/${S3_KEY_PREFIX}agent-provost/logs/error/$TODAY/" downloaded-logs/error/ || true
+          aws s3 sync "s3://ap-logs-863750994059-us-east-1-ci-test/${S3_KEY_PREFIX}agent-provost/logs/access/" downloaded-logs/access/ || true
+          aws s3 sync "s3://ap-logs-863750994059-us-east-1-ci-test/${S3_KEY_PREFIX}agent-provost/logs/error/" downloaded-logs/error/ || true
 
           echo "=== Downloaded Files ==="
           find downloaded-logs -type f -exec ls -lh {} + || true
