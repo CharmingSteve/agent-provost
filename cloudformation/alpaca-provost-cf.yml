@@ -232,7 +232,7 @@ Metadata:
       - Label:
           default: "Log Storage (S3)"
         Parameters:
-          - EnableObjectLock
+          - ObjectLockMode
           - ObjectLockRetentionDays
       - Label:
           default: "Instance Settings"
