@@ -418,6 +418,25 @@ S3 bucket names are limited to 63 characters by AWS. With the fixed prefix (`ap-
 
 ---
 
+### S3 Audit Log Immutability Options
+
+The CloudFormation template now supports three S3 Object Lock modes for audit log retention:
+
+- **NoLock**: No immutability. Audit logs can be deleted or altered by any IAM principal with S3 permissions. Use for development or test environments where regulatory retention is not required.
+- **GOVERNANCE**: Objects are WORM-locked (Write Once, Read Many), but privileged users (admins) can bypass retention and delete or alter objects if needed. Suitable for internal controls or environments where admin override is acceptable.
+- **COMPLIANCE**: Objects are WORM-locked and cannot be deleted or altered by anyone—including root/admins—until the retention period expires. Required for strict regulatory compliance (e.g., SEC Advisers Act Rule 204-2, FINRA 3110/4511, 17a-4, CFTC, etc.).
+
+**Retention Period**: The `ObjectLockRetentionDays` parameter sets the number of days objects are locked. This is only enforced when `ObjectLockMode` is set to `GOVERNANCE` or `COMPLIANCE`.
+
+**Regulatory context:**
+- Use **COMPLIANCE** mode for SEC/FINRA/17a-4 or similar requirements for tamper-proof, non-bypassable retention.
+- Use **GOVERNANCE** for internal audit or operational controls where admin override is acceptable.
+- Use **NoLock** for dev/test or where immutability is not required.
+
+> **Note:** Changing the lock mode only affects new objects written after the change. Existing objects retain their original lock mode unless explicitly updated.
+
+---
+
 ## AWS CloudTrail and CloudWatch — Deployment Security Note
 
 When you deploy Agent Provost using the CloudFormation template, you supply your Alpaca API key, Alpaca secret key, and Provost token as stack parameters. Those parameters are marked `NoEcho: true`, which prevents them from being displayed in the CloudFormation console and most AWS tooling surfaces.
@@ -436,4 +455,3 @@ However, `NoEcho` is not a complete guarantee that the values are invisible to a
 *Agent Provost is an open-source project aimed at making autonomous finance safer for everyone. If you find this useful, please **Star** the repository and contribute your safety logic ideas!*
 
 Temporary validation line for version bump workflow.
-record

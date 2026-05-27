@@ -150,26 +150,34 @@ Parameters:
       the current EC2 instance and launch a brand new one.
 
   # ── Log storage ───────────────────────────────────────────────────────────
-  EnableObjectLock:
+  ObjectLockMode:
     Type: String
-    Default: 'No'
+    Default: 'NoLock'
     AllowedValues:
-      - 'Yes'
-      - 'No'
-    Description: >
-      Set to Yes to enable S3 Object Lock on the audit log bucket (immutable
-      logs, cannot delete bucket until all objects expire). Set to No for
-      evaluation or dev deployments where easy teardown is needed.
+      - 'NoLock'
+      - 'GOVERNANCE'
+      - 'COMPLIANCE'
+    Description: |
+      S3 Object Lock mode for audit logs:
+        - NoLock: No immutability, deletions allowed by IAM policy.
+        - GOVERNANCE: Objects are WORM-locked, but privileged users (admins) can bypass retention and delete.
+        - COMPLIANCE: Objects are WORM-locked and cannot be deleted or altered by anyone (including admins) until retention expires. Required for SEC/FINRA/17a-4 compliance.
+      
+      Regulatory context:
+        - SEC Advisers Act Rule 204-2, FINRA 3110/4511, and similar require tamper-proof retention for books and records.
+        - Use COMPLIANCE mode for strict regulatory environments.
+        - Use GOVERNANCE for internal controls where admin override is acceptable.
+        - NoLock for dev/test or where immutability is not required.
 
   ObjectLockRetentionDays:
     Type: Number
     Default: 90
     MinValue: 1
     MaxValue: 3650
-    Description: >
+    Description: |
       Retention period in days for audit logs (1 = 1 day, 3650 = ~10 years).
-      Only applied when EnableObjectLock is Yes. Uses GOVERNANCE mode so
-      account administrators can still remove objects if required.
+      Only applied when ObjectLockMode is GOVERNANCE or COMPLIANCE. Ignored if NoLock.
+      In GOVERNANCE, admins can bypass retention. In COMPLIANCE, no one can delete/alter until expiry.
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Metadata – AWS Marketplace / CloudFormation console UX grouping
@@ -178,7 +186,7 @@ Parameters:
 # Conditions
 # ──────────────────────────────────────────────────────────────────────────────
 Conditions:
-  ObjectLockEnabledCondition: !Equals [!Ref EnableObjectLock, 'Yes']
+  ObjectLockEnabledCondition: !Not [!Equals [!Ref ObjectLockMode, 'NoLock']]
   AssignPublicIpCondition: !Equals [!Ref AssignPublicIp, 'true']
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
   HasSSHLocation: !Not [!Equals [!Ref SSHLocation, '']]
@@ -265,8 +273,8 @@ Metadata:
         default: "Blocked Symbols"
       AllowedAssetClasses:
         default: "Allowed Asset Classes"
-      EnableObjectLock:
-        default: "Lock audit logs in S3? (Yes / No)"
+      ObjectLockMode:
+        default: "Audit log lock mode (NoLock/GOVERNANCE/COMPLIANCE)"
       ObjectLockRetentionDays:
         default: "Log retention period (days, 1-3650)"
       ForceReplacementToken:
@@ -304,7 +312,7 @@ Resources:
         - ObjectLockEnabled: Enabled
           Rule:
             DefaultRetention:
-              Mode: GOVERNANCE
+              Mode: !Ref ObjectLockMode
               Days: !Ref ObjectLockRetentionDays
         - !Ref AWS::NoValue
       BucketEncryption:
