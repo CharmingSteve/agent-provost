@@ -279,6 +279,7 @@ rm -f /root/.bash_history
 rm -f /home/ubuntu/.bash_history
 rm -f /root/.git-credentials /home/ubuntu/.git-credentials
 rm -f /root/.config/git/credentials /home/ubuntu/.config/git/credentials
+rm -f /home/ubuntu/.ssh/authorized_keys /root/.ssh/authorized_keys /home/provost/.ssh/authorized_keys || true
 git config --global --unset-all credential.helper || true
 rm -f /etc/ssh/ssh_host_*
 truncate -s 0 /etc/machine-id || true
