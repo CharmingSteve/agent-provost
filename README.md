@@ -14,6 +14,68 @@ Stop your AI agent from going rogue with programmable risk guardrails and a tamp
 
 ## Quickstart (TLDR)
 
+## 🚀 AWS Marketplace Deployment & Usage
+
+Agent Provost is designed to be deployed as a secure, stateless appliance inside your own AWS account via the AWS Marketplace.
+
+### Step 1: Deploy the Appliance
+1. Subscribe to Agent Provost on the AWS Marketplace and launch the **CloudFormation** template.
+2. Fill out the deployment parameters:
+   - **Alpaca Credentials:** Enter your Alpaca API Key and Secret Key (stored securely in AWS Secrets Manager, never on disk).
+   - **Provost Token:** Create a secure, random password. Your AI will use this to authenticate with the proxy.
+   - **Trading Rules:** Set your `MaxTradeNotional`, `MaxSharesPerTrade`, and your Symbol Allowlists/Blocklists.
+3. Wait for the stack status to reach `CREATE_COMPLETE`. 
+4. Go to the **Outputs** tab of your CloudFormation stack to find the **Public IP Address** of your new appliance.
+
+### Step 2: Connect Your AI (MCP Client Setup)
+Agent Provost acts as a remote MCP server. Update your MCP client configuration file to route traffic to your EC2 instance's IP address, using the `PROVOST_TOKEN` you created during deployment.
+
+#### For Claude Desktop
+Edit your `claude_desktop_config.json` file:
+```json
+{
+  "mcpServers": {
+    "alpaca-provost": {
+      "type": "sse",
+      "url": "http://<YOUR_EC2_PUBLIC_IP>:8000/sse",
+      "env": {
+        "PROVOST_TOKEN": "<YOUR_PROVOST_TOKEN>",
+        "PROVOST_USER": "claude-desktop",
+        "PROVOST_MACHINE": "work-laptop"
+      }
+    }
+  }
+}
+```
+
+#### For Cursor
+Add this to your Cursor MCP settings (`.cursor/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "alpaca-provost": {
+      "type": "sse",
+      "url": "http://<YOUR_EC2_PUBLIC_IP>:8000/sse",
+      "env": {
+        "PROVOST_TOKEN": "<YOUR_PROVOST_TOKEN>",
+        "PROVOST_USER": "cursor-ide",
+        "PROVOST_MACHINE": "dev-machine"
+      }
+    }
+  }
+}
+```
+*(Note: Replace `<YOUR_EC2_PUBLIC_IP>` and `<YOUR_PROVOST_TOKEN>` with your actual values. The `PROVOST_USER` and `PROVOST_MACHINE` headers are optional but highly recommended, as they will be recorded in your immutable S3 audit logs to identify exactly who initiated the trade).*
+
+### Step 3: Verify the Connection
+1. Restart your MCP client (Claude or Cursor).
+2. Open a new chat and type: *"What is my current account balance and buying power?"*
+3. **Test the Rules Engine:** Ask the AI to buy 10,000 shares of a stock. Agent Provost will intercept the request, block it based on your CloudFormation rules, and log the blocked attempt to your S3 bucket.
+
+***
+
+# For installing manually from this repo
+
 Clone and run locally (dev):
 Have the following set in a local .env file in the root dir of the repo
 ALPACA_API_KEY=YOUR-ALPACA-KEY
