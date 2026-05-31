@@ -20,7 +20,7 @@ Agent Provost is designed to be deployed as a secure, stateless appliance inside
 
 ### Step 1: Deploy the Appliance
 1. Subscribe to Agent Provost on the AWS Marketplace and launch the **CloudFormation** template.
-2. Fill out the deployment parameters:
+2. Fill out the ALL of the deployment parameters including the rules:
    - **Alpaca Credentials:** Enter your Alpaca API Key and Secret Key (stored securely in AWS Secrets Manager, never on disk).
    - **Provost Token:** Create a secure, random password. Your AI will use this to authenticate with the proxy.
    - **Trading Rules:** Set your `MaxTradeNotional`, `MaxSharesPerTrade`, and your Symbol Allowlists/Blocklists.
