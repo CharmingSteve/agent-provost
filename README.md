@@ -1,5 +1,11 @@
 # Agent Provost: The Safety Firewall & Audit Ledger for Autonomous AI Trading
 
+<p align="center">
+   <img src="agent-provost-1-Copilot_20260526_195647.png" alt="Agent Provost lock-eye emblem" width="360" />
+</p>
+
+> Agent Provost: gaurdrails for AI trading
+
 **Agent Provost** is a high-performance, mandatory MITM (Man-in-the-Middle) boundary designed specifically for **AI trading flows** and **Autonomous Agents**. By placing an OpenResty (Nginx + Lua) proxy between your LLM client, your **Model Context Protocol (MCP) server**, and the **Alpaca Trading API**, it ensures every single trade is observable, audited, and safety-checked.
 
 Stop your AI agent from going rogue with programmable risk guardrails and a tamper-proof audit trail.
@@ -375,6 +381,16 @@ Agent Provost is designed to support compliance with financial AI governance reg
 | 🌐 Global | **ISO 42001 (AI Management) / ISO 27001 (Security)** | Provides foundational controls for AI governance, security, and traceability consistent with international standards. |
 
 > **Note:** This alignment summary describes architectural intent and does not constitute legal or compliance advice. Consult your compliance officer to validate applicability to your specific regulatory context.
+
+---
+
+## 📜 License and Legal Notices
+
+- Open-source repository license: [AGPL-3.0](LICENSE)
+- Commercial AWS Marketplace license terms: [legal/EULA.md](legal/EULA.md)
+- Third-party attributions and notices: [legal/THIRD-PARTY-NOTICES.txt](legal/THIRD-PARTY-NOTICES.txt)
+
+For AWS Marketplace deployments, review the commercial terms in the EULA. For source-code licensing and redistribution obligations in this repository, follow AGPL-3.0.
 
 ---
 
