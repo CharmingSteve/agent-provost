@@ -135,12 +135,11 @@ Parameters:
 
   MCPAccessLocation:
     Type: String
-    Default: '0.0.0.0/0'
     AllowedPattern: '^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/(3[0-2]|[12]?[0-9])$'
-    ConstraintDescription: Must be a valid IPv4 CIDR range such as 0.0.0.0/0 or 1.2.3.4/32.
+    ConstraintDescription: Must be a valid IPv4 CIDR range such as 1.2.3.4/32.
     Description: >
       CIDR IP range permitted to reach port 8088 for MCP/proxy access
-      (e.g. 1.2.3.4/32). Use 0.0.0.0/0 to allow from anywhere.
+      (e.g. 1.2.3.4/32). 
 
   ForceReplacementToken:
     Type: String
