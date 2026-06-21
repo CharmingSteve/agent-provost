@@ -36,8 +36,8 @@
           <mxGeometry x="310" y="390" width="420" height="380" as="geometry" />
         </mxCell>
 
-        <mxCell id="sg-rules-label" parent="1" vertex="1" style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#DD3522;fillColor=#FFFFFF;strokeColor=none;" value="Ingress rules:&#10;- TCP 8088 from MCPAccessLocation&#10;- TCP 22 only if KeyName + SSHLocation">
-          <mxGeometry x="320" y="735" width="250" height="44" as="geometry" />
+        <mxCell id="sg-rules-label" parent="1" vertex="1" style="text;html=1;align=left;verticalAlign=top;fontSize=9;fontColor=#DD3522;fillColor=none;strokeColor=none;" value="Ingress rules:&#10;&#8226; TCP 8088 from MCPAccessLocation&#10;&#8226; TCP 22 only if KeyName + SSHLocation">
+          <mxGeometry x="322" y="705" width="255" height="46" as="geometry" />
         </mxCell>
 
         <!-- ===================== EC2 + INTERNALS ===================== -->
@@ -49,8 +49,8 @@
           <mxGeometry x="600" y="408" width="58" height="58" as="geometry" />
         </mxCell>
 
-        <mxCell id="runtime-panel" parent="1" vertex="1" style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#232F3E;fillColor=none;strokeColor=none;" value="Runtime on instance (Docker Compose):&#10;&#10;&#8226; OpenResty proxy (in:8000, out:8081)&#10;&#8226; Alpaca MCP server (internal network)&#10;&#8226; Fluent Bit (Unix socket shipper)&#10;&#8226; /run/secrets tmpfs (memory only)&#10;&#8226; Rules engine (hot-reload)">
-          <mxGeometry x="352" y="585" width="305" height="138" as="geometry" />
+        <mxCell id="runtime-panel" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#879196;fontColor=#232F3E;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=10;" value="Runtime on instance (Docker Compose):&#10;&#10;&#8226; OpenResty proxy (in:8000, out:8081)&#10;&#8226; Alpaca MCP server (internal network)&#10;&#8226; Fluent Bit (Unix socket shipper)&#10;&#8226; /run/secrets tmpfs (memory only)&#10;&#8226; Rules engine (hot-reload)">
+          <mxGeometry x="350" y="548" width="300" height="150" as="geometry" />
         </mxCell>
 
         <!-- ===================== NETWORK EDGE (existing VPC) ===================== -->
