@@ -210,8 +210,8 @@ jobs:
       - name: Install Trivy
         run: |
           set -euo pipefail
-          TRIVY_VERSION="0.70.0"
-          TRIVY_TARBALL="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          TRIVY_VERSION="0.71.2"
+          TRIVY_TARBALL="trivy_${TRIVY_VERSION}_Linux-ARM64bit.tar.gz"
           TRIVY_BASE_URL="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
           curl -fsSL -o "/tmp/${TRIVY_TARBALL}" "${TRIVY_BASE_URL}/${TRIVY_TARBALL}"
           curl -fsSL -o /tmp/trivy-checksums.txt "${TRIVY_BASE_URL}/trivy_${TRIVY_VERSION}_checksums.txt"
