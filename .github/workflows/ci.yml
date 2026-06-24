@@ -43,7 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           HADOLINT_VERSION="v2.14.0"
-          HADOLINT_BIN="hadolint-linux-x86_64"
+          HADOLINT_BIN="hadolint-linux-arm64"
           HADOLINT_BASE_URL="https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}"
           curl -fsSL -o "/tmp/${HADOLINT_BIN}" "${HADOLINT_BASE_URL}/${HADOLINT_BIN}"
           curl -fsSL -o "/tmp/${HADOLINT_BIN}.sha256" "${HADOLINT_BASE_URL}/${HADOLINT_BIN}.sha256"
