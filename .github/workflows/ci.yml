@@ -21,7 +21,7 @@ jobs:
   # ── Shell linting ──────────────────────────────────────────────────────────
   lint-shell:
     name: ShellCheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - name: Install ShellCheck
@@ -36,7 +36,7 @@ jobs:
   # ── Dockerfile linting ─────────────────────────────────────────────────────
   lint-dockerfile:
     name: Hadolint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - name: Install Hadolint
@@ -56,7 +56,7 @@ jobs:
   # ── Lua linting ────────────────────────────────────────────────────────────
   lint-lua:
     name: luacheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - name: Install luacheck
@@ -70,7 +70,7 @@ jobs:
   # ── Lua unit tests ─────────────────────────────────────────────────────────
   test-lua:
     name: busted (Lua unit tests)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [lint-lua]
     steps:
       - uses: actions/checkout@v4
@@ -86,7 +86,7 @@ jobs:
   # ── Shell unit tests ───────────────────────────────────────────────────────
   test-shell:
     name: bats (shell unit tests)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [lint-shell]
     steps:
       - uses: actions/checkout@v4
@@ -103,7 +103,7 @@ jobs:
   # ── GitHub Actions workflow linting ──────────────────────────────────────
   lint-github-actions:
     name: actionlint (GitHub Actions)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - name: Install actionlint
@@ -123,7 +123,7 @@ jobs:
   # ── GitHub Actions workflow security linting ─────────────────────────────
   security-zizmor:
     name: zizmor (GitHub Actions security)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - name: Install zizmor
@@ -193,7 +193,7 @@ jobs:
   # ── Trivy filesystem scan ──────────────────────────────────────────────────
   security-trivy:
     name: Trivy (filesystem / image scan)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - name: Set local trivy build tag for alpaca image
@@ -323,7 +323,7 @@ jobs:
   # ── Checkov IaC security scan ──────────────────────────────────────────────
   security-checkov:
     name: Checkov (IaC security)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - name: Install Checkov
@@ -334,7 +334,7 @@ jobs:
   # ── Python dependency security scan ─────────────────────────────────────────
   security-python-audit:
     name: pip-audit (Python dependencies)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - name: Install pip-audit
@@ -351,7 +351,7 @@ jobs:
   # ── Secrets detection ──────────────────────────────────────────────────────
   security-gitleaks:
     name: Gitleaks (secrets detection)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
         with:
@@ -367,7 +367,7 @@ jobs:
   # ── Credentials gate (sets output used by integration-tests) ─────────────────
   check-credentials:
     name: Check Alpaca credentials
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     outputs:
       enabled: ${{ steps.gate.outputs.enabled }}
     steps:
