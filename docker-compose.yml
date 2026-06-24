@@ -1,5 +1,6 @@
 services:
   alpaca-mcp:
+    # Alpaca image is built with docker build and pushed to ECR. Digest is sourced from .env.versions via: docker compose --env-file .env.versions. It is built from the alpace-mcp.Dockerfile in the root of this repo.
     image: ${ALPACA_IMAGE}@${ALPACA_IMAGE_TAG}
     pull_policy: if_not_present
     container_name: alpaca-mcp
@@ -68,7 +69,7 @@ services:
     pids_limit: 256
     restart: unless-stopped
   agent-provost:
-    # Digest is sourced from .env.versions via: docker compose --env-file .env.versions ...
+    # Agent Provost image  is the public Openresty image with a custom entrypoint script that runs the rules. Digest is sourced from .env.versions via: docker compose --env-file .env.versions. It is  Digest is sourced from .env.versions via: docker compose --env-file .env.versions 
     image: ${OPENRESTY_IMAGE}
     pull_policy: if_not_present
     container_name: agent-provost
