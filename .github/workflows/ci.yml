@@ -204,6 +204,8 @@ jobs:
         run: |
           eval "$(sh bootstrap.sh runner)"
       - name: Validate docker compose spec
+        env:
+          DOCKER_DEFAULT_PLATFORM: linux/arm64
         run: docker compose --env-file .env.versions -f docker-compose.yml config --quiet
       - name: Install Trivy
         run: |
