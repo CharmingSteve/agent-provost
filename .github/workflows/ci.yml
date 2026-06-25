@@ -110,7 +110,7 @@ jobs:
         run: |
           set -euo pipefail
           ACTIONLINT_VERSION="1.7.12"
-          ACTIONLINT_TARBALL="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          ACTIONLINT_TARBALL="actionlint_${ACTIONLINT_VERSION}_linux_arm64.tar.gz"
           ACTIONLINT_BASE_URL="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
           curl -fsSL -o "/tmp/${ACTIONLINT_TARBALL}" "${ACTIONLINT_BASE_URL}/${ACTIONLINT_TARBALL}"
           tar -xzf "/tmp/${ACTIONLINT_TARBALL}" -C /tmp actionlint
