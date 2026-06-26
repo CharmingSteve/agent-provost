@@ -257,7 +257,7 @@ jobs:
       - name: Trivy image scan (agent-provost)
         run: |
           set +e
-          trivy image --exit-code 1 --severity CRITICAL,HIGH "${OPENRESTY_IMAGE}" > /tmp/trivy-openresty.txt 2>&1
+          trivy image --exit-code 1 --severity CRITICAL,HIGH --ignorefile .trivyignore "${OPENRESTY_IMAGE}" > /tmp/trivy-openresty.txt 2>&1
           trivy_openresty_status=$?
           cat /tmp/trivy-openresty.txt
           echo "TRIVY_OPENRESTY_STATUS=${trivy_openresty_status}" >> "$GITHUB_ENV"
