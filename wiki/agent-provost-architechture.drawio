@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net">
+  <diagram name="agent-provost" id="agent-provost-arch-2026">
+    <mxGraphModel dx="1736" dy="1601" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1560" pageHeight="878" background="#ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===================== TITLE ===================== -->
+        <mxCell id="title" parent="1" vertex="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=16;fontStyle=1;fontColor=#232F3E;" value="Agent Provost &#8212; AWS Marketplace AMI Deployment (CloudFormation)">
+          <mxGeometry x="430" y="18" width="700" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== BOUNDARIES ===================== -->
+        <mxCell id="aws-cloud" parent="1" vertex="1" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_aws_cloud;strokeColor=#232F3E;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#232F3E;dashed=0;" value="AWS Cloud">
+          <mxGeometry x="180" y="50" width="1350" height="800" as="geometry" />
+        </mxCell>
+
+        <mxCell id="aws-region" parent="1" vertex="1" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_region;strokeColor=#147EBA;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#147EBA;dashed=1;" value="AWS Region (deployment Region)">
+          <mxGeometry x="210" y="86" width="1300" height="748" as="geometry" />
+        </mxCell>
+
+        <mxCell id="vpc" parent="1" vertex="1" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc;strokeColor=#8C4FFF;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#8C4FFF;dashed=0;" value="Customer VPC">
+          <mxGeometry x="240" y="210" width="560" height="600" as="geometry" />
+        </mxCell>
+
+        <mxCell id="subnet-public" parent="1" vertex="1" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=11;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_public_subnet;strokeColor=#248814;fillColor=#E6F6E6;verticalAlign=top;align=left;spacingLeft=30;fontColor=#248814;dashed=1;" value="Public subnet boundary (existing)">
+          <mxGeometry x="280" y="330" width="230" height="460" as="geometry" />
+        </mxCell>
+
+        <mxCell id="subnet-private" parent="1" vertex="1" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=11;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_private_subnet;strokeColor=#147EBA;fillColor=#EAF4FF;verticalAlign=top;align=left;spacingLeft=30;fontColor=#147EBA;dashed=1;" value="Private subnet boundary (existing)">
+          <mxGeometry x="530" y="330" width="230" height="460" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sg" parent="1" vertex="1" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=10;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;strokeColor=#DD3522;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#DD3522;dashed=0;" value="Security Group&#10;TCP 8088 from&#10;MCPAccessLocation&#10;TCP 22 only if&#10;KeyName + SSHLocation">
+          <mxGeometry x="310" y="390" width="420" height="380" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== EC2 + INTERNALS ===================== -->
+        <mxCell id="ec2" parent="1" vertex="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientDirection=north;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ec2;fillColor=#D05C17;gradientColor=#F78E04;" value="Agent Provost EC2&#10;SubnetId from SubnetLookup&#10;AssociatePublicIpAddress per AssignPublicIp">
+          <mxGeometry x="460" y="405" width="78" height="78" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ebs" parent="1" vertex="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientDirection=north;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.elastic_block_store;fillColor=#277116;gradientColor=#60A337;" value="Encrypted EBS&#10;(gp3 root)">
+          <mxGeometry x="600" y="408" width="58" height="58" as="geometry" />
+        </mxCell>
+
+        <mxCell id="runtime-panel" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#879196;fontColor=#232F3E;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fontSize=9;" value="Runtime on instance (Docker Compose):&#10;&#10;&#8226; OpenResty proxy (host 8088 &#8594; in:8000, out:8081)&#10;&#8226; Alpaca MCP server (internal network)&#10;&#8226; Fluent Bit (Unix socket shipper)&#10;&#8226; /run/secrets tmpfs (memory only)&#10;&#8226; Rules engine (hot-reload)">
+          <mxGeometry x="362" y="566" width="258" height="126" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== NETWORK EDGE (existing VPC) ===================== -->
+
+        <!-- ===================== EXTERNAL ACTORS ===================== -->
+        <mxCell id="client" parent="1" vertex="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientDirection=north;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.users;fillColor=#232F3E;gradientColor=#5A6B86;" value="User / LLM Client&#10;(MCP over TCP 8088)">
+          <mxGeometry x="40" y="380" width="78" height="78" as="geometry" />
+        </mxCell>
+
+        <mxCell id="alpaca-api" parent="1" vertex="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=11;fontStyle=1;fontColor=#232F3E;fillColor=none;strokeColor=none;" value="Alpaca Trading API&#10;(Third-party, Internet)">
+          <mxGeometry x="1395" y="400" width="145" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== MANAGED SERVICES (RIGHT) ===================== -->
+        <!-- Row 1: control plane -->
+        <mxCell id="cfn" parent="1" vertex="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientDirection=north;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudformation;fillColor=#E7157B;gradientColor=#B0084D;" value="AWS&#10;CloudFormation">
+          <mxGeometry x="900" y="120" width="78" height="78" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lambda" parent="1" vertex="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientDirection=north;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#D05C17;gradientColor=#F78E04;" value="AWS Lambda&#10;(SubnetLookup)">
+          <mxGeometry x="1090" y="120" width="78" height="78" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cw-logs" parent="1" vertex="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientDirection=north;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudwatch;fillColor=#E7157B;gradientColor=#B0084D;" value="CloudWatch Logs&#10;(Lambda setup only, 1 day)">
+          <mxGeometry x="1280" y="120" width="78" height="78" as="geometry" />
+        </mxCell>
+
+        <!-- Row 2: identity + secrets -->
+        <mxCell id="secrets" parent="1" vertex="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientDirection=north;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.secrets_manager;fillColor=#C7131F;gradientColor=#F54749;" value="AWS Secrets&#10;Manager">
+          <mxGeometry x="900" y="330" width="78" height="78" as="geometry" />
+        </mxCell>
+
+        <mxCell id="iam-ec2" parent="1" vertex="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientDirection=north;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#C7131F;gradientColor=#F54749;" value="IAM Role + Instance&#10;Profile (EC2)">
+          <mxGeometry x="1090" y="330" width="78" height="78" as="geometry" />
+        </mxCell>
+
+        <mxCell id="iam-lambda" parent="1" vertex="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientDirection=north;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#C7131F;gradientColor=#F54749;" value="IAM Role&#10;(Lambda)">
+          <mxGeometry x="1280" y="330" width="78" height="78" as="geometry" />
+        </mxCell>
+
+        <!-- Row 3: storage -->
+        <mxCell id="s3" parent="1" vertex="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientDirection=north;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;fillColor=#277116;gradientColor=#60A337;" value="Amazon S3 Audit Logs&#10;Versioned + SSE-KMS&#10;ObjectLockMode: NoLock /&#10;GOVERNANCE / COMPLIANCE">
+          <mxGeometry x="900" y="560" width="78" height="78" as="geometry" />
+        </mxCell>
+
+        <mxCell id="kms" parent="1" vertex="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientDirection=north;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.key_management_service;fillColor=#C7131F;gradientColor=#F54749;" value="AWS KMS&#10;(SSE-KMS, AWS-managed key)">
+          <mxGeometry x="1090" y="560" width="78" height="78" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== EDGES: TRAFFIC (solid) ===================== -->
+        <mxCell id="traffic-label-inbound" parent="1" vertex="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=10;fontColor=#232F3E;fillColor=#ffffff;strokeColor=none;" value="Inbound (MCP client TCP 8088)">
+          <mxGeometry x="120" y="420" width="170" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="traffic-label-egress" parent="1" vertex="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=10;fontColor=#232F3E;fillColor=#ffffff;strokeColor=none;" value="Outbound (Alpaca Trading API)">
+          <mxGeometry x="780" y="410" width="200" height="18" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e-client-ec2" parent="1" edge="1" source="client" target="ec2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#1BA1E2;fontColor=#232F3E;" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-ec2-alpaca" parent="1" edge="1" source="ec2" target="alpaca-api" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#D86613;fontColor=#232F3E;" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== EDGES: CONTROL PLANE (dashed) ===================== -->
+        <mxCell id="e-cfn-lambda" parent="1" edge="1" source="cfn" target="lambda" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=1.5;dashed=1;strokeColor=#7D3CCF;fontColor=#232F3E;" value="Provisions / invokes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-lambda-cw" parent="1" edge="1" source="lambda" target="cw-logs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=1.5;dashed=1;strokeColor=#7D3CCF;fontColor=#232F3E;" value="Lambda logs only">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-lambda-iam" parent="1" edge="1" source="lambda" target="iam-lambda" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=1.5;dashed=1;strokeColor=#C7131F;fontColor=#232F3E;" value="Assume role">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1129" y="200" />
+              <mxPoint x="1129" y="300" />
+              <mxPoint x="1319" y="300" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-lambda-vpc" parent="1" edge="1" source="lambda" target="vpc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=1.5;dashed=1;strokeColor=#7D3CCF;fontColor=#232F3E;" value="SubnetLookup: InstanceType AZ&#10;returns selected SubnetId">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1129" y="260" />
+              <mxPoint x="805" y="260" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ===================== EDGES: IDENTITY + SECRETS (dashed) ===================== -->
+        <mxCell id="e-ec2-iam" parent="1" edge="1" source="ec2" target="iam-ec2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=1.5;dashed=1;strokeColor=#C7131F;fontColor=#232F3E;" value="Instance profile + DescribeTags">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-ec2-secrets" parent="1" edge="1" source="ec2" target="secrets" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=1.5;dashed=1;strokeColor=#C7131F;fontColor=#232F3E;" value="GetSecretValue &#8594; tmpfs">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== EDGES: STORAGE / LOGGING (dashed) ===================== -->
+        <mxCell id="e-ec2-s3" parent="1" edge="1" source="ec2" target="s3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=1.5;dashed=1;strokeColor=#277116;fontColor=#232F3E;" value="Fluent Bit PutObject">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-s3-kms" parent="1" edge="1" source="s3" target="kms" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=1.5;dashed=1;strokeColor=#277116;fontColor=#232F3E;" value="SSE-KMS">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

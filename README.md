@@ -1,5 +1,11 @@
 # Agent Provost: The Safety Firewall & Audit Ledger for Autonomous AI Trading
 
+<p align="center">
+   <img src="agent-provost-1-Copilot_20260526_195647.png" alt="Agent Provost lock-eye emblem" width="360" />
+</p>
+
+> Agent Provost: gaurdrails for AI trading
+
 **Agent Provost** is a high-performance, mandatory MITM (Man-in-the-Middle) boundary designed specifically for **AI trading flows** and **Autonomous Agents**. By placing an OpenResty (Nginx + Lua) proxy between your LLM client, your **Model Context Protocol (MCP) server**, and the **Alpaca Trading API**, it ensures every single trade is observable, audited, and safety-checked.
 
 Stop your AI agent from going rogue with programmable risk guardrails and a tamper-proof audit trail.
@@ -7,6 +13,68 @@ Stop your AI agent from going rogue with programmable risk guardrails and a tamp
 ---
 
 ## Quickstart (TLDR)
+
+## 🚀 AWS Marketplace Deployment & Usage
+
+Agent Provost is designed to be deployed as a secure, stateless appliance inside your own AWS account via the AWS Marketplace.
+
+### Step 1: Deploy the Appliance
+1. Subscribe to Agent Provost on the AWS Marketplace and launch the **CloudFormation** template.
+2. Fill out the ALL of the deployment parameters including the rules:
+   - **Alpaca Credentials:** Enter your Alpaca API Key and Secret Key (stored securely in AWS Secrets Manager, never on disk).
+   - **Provost Token:** Create a secure, random password. Your AI will use this to authenticate with the proxy.
+   - **Trading Rules:** Set your `MaxTradeNotional`, `MaxSharesPerTrade`, and your Symbol Allowlists/Blocklists.
+3. Wait for the stack status to reach `CREATE_COMPLETE`. 
+4. Go to the **Outputs** tab of your CloudFormation stack to find the **Public IP Address** of your new appliance.
+
+### Step 2: Connect Your AI (MCP Client Setup)
+Agent Provost acts as a remote MCP server. Update your MCP client configuration file to route traffic to your EC2 instance's IP address, using the `PROVOST_TOKEN` you created during deployment.
+
+#### For Claude Desktop
+Edit your `claude_desktop_config.json` file:
+```json
+{
+  "mcpServers": {
+    "alpaca-provost": {
+      "type": "sse",
+      "url": "http://<YOUR_EC2_PUBLIC_IP>:8000/sse",
+      "env": {
+        "PROVOST_TOKEN": "<YOUR_PROVOST_TOKEN>",
+        "PROVOST_USER": "claude-desktop",
+        "PROVOST_MACHINE": "work-laptop"
+      }
+    }
+  }
+}
+```
+
+#### For Cursor
+Add this to your Cursor MCP settings (`.cursor/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "alpaca-provost": {
+      "type": "sse",
+      "url": "http://<YOUR_EC2_PUBLIC_IP>:8000/sse",
+      "env": {
+        "PROVOST_TOKEN": "<YOUR_PROVOST_TOKEN>",
+        "PROVOST_USER": "cursor-ide",
+        "PROVOST_MACHINE": "dev-machine"
+      }
+    }
+  }
+}
+```
+*(Note: Replace `<YOUR_EC2_PUBLIC_IP>` and `<YOUR_PROVOST_TOKEN>` with your actual values. The `PROVOST_USER` and `PROVOST_MACHINE` headers are optional but highly recommended, as they will be recorded in your immutable S3 audit logs to identify exactly who initiated the trade).*
+
+### Step 3: Verify the Connection
+1. Restart your MCP client (Claude or Cursor).
+2. Open a new chat and type: *"What is my current account balance and buying power?"*
+3. **Test the Rules Engine:** Ask the AI to buy 10,000 shares of a stock. Agent Provost will intercept the request, block it based on your CloudFormation rules, and log the blocked attempt to your S3 bucket.
+
+***
+
+# For installing manually from this repo
 
 Clone and run locally (dev):
 Have the following set in a local .env file in the root dir of the repo
@@ -378,6 +446,16 @@ Agent Provost is designed to support compliance with financial AI governance reg
 
 ---
 
+## 📜 License and Legal Notices
+
+- Open-source repository license: [AGPL-3.0](LICENSE)
+- Commercial AWS Marketplace license terms: [legal/EULA.md](legal/EULA.md)
+- Third-party attributions and notices: [legal/THIRD-PARTY-NOTICES.txt](legal/THIRD-PARTY-NOTICES.txt)
+
+For AWS Marketplace deployments, review the commercial terms in the EULA. For source-code licensing and redistribution obligations in this repository, follow AGPL-3.0.
+
+---
+
 ## Important Notes
 
 - This README describes current behavior of the active config files in this repo.
@@ -418,6 +496,25 @@ S3 bucket names are limited to 63 characters by AWS. With the fixed prefix (`ap-
 
 ---
 
+### S3 Audit Log Immutability Options
+
+The CloudFormation template now supports three S3 Object Lock modes for audit log retention:
+
+- **NoLock**: No immutability. Audit logs can be deleted or altered by any IAM principal with S3 permissions. Use for development or test environments where regulatory retention is not required.
+- **GOVERNANCE**: Objects are WORM-locked (Write Once, Read Many), but privileged users (admins) can bypass retention and delete or alter objects if needed. Suitable for internal controls or environments where admin override is acceptable.
+- **COMPLIANCE**: Objects are WORM-locked and cannot be deleted or altered by anyone—including root/admins—until the retention period expires. Required for strict regulatory compliance (e.g., SEC Advisers Act Rule 204-2, FINRA 3110/4511, 17a-4, CFTC, etc.).
+
+**Retention Period**: The `ObjectLockRetentionDays` parameter sets the number of days objects are locked. This is only enforced when `ObjectLockMode` is set to `GOVERNANCE` or `COMPLIANCE`.
+
+**Regulatory context:**
+- Use **COMPLIANCE** mode for SEC/FINRA/17a-4 or similar requirements for tamper-proof, non-bypassable retention.
+- Use **GOVERNANCE** for internal audit or operational controls where admin override is acceptable.
+- Use **NoLock** for dev/test or where immutability is not required.
+
+> **Note:** Changing the lock mode only affects new objects written after the change. Existing objects retain their original lock mode unless explicitly updated.
+
+---
+
 ## AWS CloudTrail and CloudWatch — Deployment Security Note
 
 When you deploy Agent Provost using the CloudFormation template, you supply your Alpaca API key, Alpaca secret key, and Provost token as stack parameters. Those parameters are marked `NoEcho: true`, which prevents them from being displayed in the CloudFormation console and most AWS tooling surfaces.
@@ -436,4 +533,3 @@ However, `NoEcho` is not a complete guarantee that the values are invisible to a
 *Agent Provost is an open-source project aimed at making autonomous finance safer for everyone. If you find this useful, please **Star** the repository and contribute your safety logic ideas!*
 
 Temporary validation line for version bump workflow.
-record

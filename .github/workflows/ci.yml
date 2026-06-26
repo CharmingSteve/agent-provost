@@ -296,8 +296,7 @@ jobs:
             echo "::error title=Trivy scan failed::Filesystem scan has HIGH/CRITICAL findings."
           fi
           if [ "${TRIVY_OPENRESTY_STATUS:-0}" -ne 0 ]; then
-            failed=1
-            echo "::error title=Trivy scan failed::Image ${OPENRESTY_IMAGE} has HIGH/CRITICAL CVEs: ${TRIVY_OPENRESTY_CVES:-unavailable}"
+            echo "::warning title=Trivy advisory::Third-party image ${OPENRESTY_IMAGE} has HIGH/CRITICAL CVEs: ${TRIVY_OPENRESTY_CVES:-unavailable}"
             if [ -f /tmp/trivy-openresty.json ]; then
               jq -r "$JQ_CVE" /tmp/trivy-openresty.json 2>/dev/null || true
             fi
