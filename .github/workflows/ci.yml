@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - third-set-of-fixes
+      - copilot/dependabot-fix-ci-failures
   pull_request:
     branches:
       - main
