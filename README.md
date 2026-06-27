@@ -449,10 +449,10 @@ Agent Provost is designed to support compliance with financial AI governance reg
 ## 📜 License and Legal Notices
 
 - Open-source repository license: [AGPL-3.0](LICENSE)
-- Commercial AWS Marketplace license terms: [legal/EULA.md](legal/EULA.md)
+- Commercial license terms for AWS Marketplace deployments: [legal/EULA.md](legal/EULA.md)
 - Third-party attributions and notices: [legal/THIRD-PARTY-NOTICES.txt](legal/THIRD-PARTY-NOTICES.txt)
 
-For AWS Marketplace deployments, review the commercial terms in the EULA. For source-code licensing and redistribution obligations in this repository, follow AGPL-3.0.
+This README's deployment instructions are specific to the AWS Marketplace CloudFormation flow. For those deployments, review the commercial terms in the EULA. For source-code licensing and redistribution obligations in this repository, follow AGPL-3.0.
 
 ---
 
