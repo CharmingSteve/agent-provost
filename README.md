@@ -10,6 +10,8 @@
 
 Stop your AI agent from going rogue with programmable risk guardrails and a tamper-proof audit trail.
 
+**👉 Launch on AWS Marketplace:** [Agent Provost AMI](https://aws.amazon.com/marketplace/pp/prodview-ouyql6wbwo6yg)
+
 ---
 
 ## Quickstart (TLDR)
