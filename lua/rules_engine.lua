@@ -465,6 +465,39 @@ function _M.check_request(parsed, rules, context)
     end
 
     -- ----------------------------------------------------------------
+    -- Rule: allowed_tickers
+    -- Draconian mode: blocks any ticker NOT in the explicit allowlist.
+    -- Check happens before blocked_tickers so a strict allowlist takes
+    -- precedence over any per-symbol blocklist entries.
+    -- ----------------------------------------------------------------
+    local allowed_rule = rules.allowed_tickers
+    if type(allowed_rule) == "table" and allowed_rule.enabled == true
+       and type(allowed_rule.params) == "table"
+       and type(allowed_rule.params.tickers) == "table" then
+        if has_invalid_ticker_type(args) then
+            return true,
+                "PROVOST_INTERVENTION: Invalid ticker type. " ..
+                "Ticker fields must be strings."
+        end
+        local ticker = normalize_ticker(args)
+        if ticker ~= "" then
+            local found = false
+            for _, allowed_sym in ipairs(allowed_rule.params.tickers) do
+                local allowed_symbol = normalize_identifier(allowed_sym)
+                if allowed_symbol ~= nil and ticker == allowed_symbol:upper() then
+                    found = true
+                    break
+                end
+            end
+            if not found then
+                return true,
+                    "PROVOST_INTERVENTION: Ticker '" .. ticker ..
+                    "' is not in the allowed symbol list."
+            end
+        end
+    end
+
+    -- ----------------------------------------------------------------
     -- Rule: blocked_tickers
     -- Blocks requests whose ticker field matches the restricted list.
     -- ----------------------------------------------------------------

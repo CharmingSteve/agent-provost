@@ -91,10 +91,22 @@ Parameters:
       Corporate Pro accounts can set this higher (for example up to 10000).
       Set to 0 to disable this inbound RPM guardrail.
 
+  EnableAllowlist:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'false'
+      - 'true'
+    Description: >
+      Enable allowlist (draconian) mode. When true, ONLY symbols listed in
+      AllowedSymbols can be traded. All others are blocked. Disabled by default.
+
   AllowedSymbols:
     Type: String
     Default: "SPY,QQQ,AAPL,MSFT"
-    Description: "Comma-separated list of allowed symbols"
+    Description: >
+      Comma-separated list of allowed symbols. Only enforced when EnableAllowlist
+      is set to true. Has no effect when EnableAllowlist is false.
 
   BlockedSymbols:
     Type: String
@@ -178,6 +190,14 @@ Parameters:
       Only applied when ObjectLockMode is GOVERNANCE or COMPLIANCE. Ignored if NoLock.
       In GOVERNANCE, admins can bypass retention. In COMPLIANCE, no one can delete/alter until expiry.
 
+  # ── Encryption (BYOK) ────────────────────────────────────────────────────
+  KmsKeyArn:
+    Type: String
+    Default: ''
+    Description: >
+      Optional: ARN of your existing KMS key for S3 log encryption (BYOK).
+      Leave blank to use AWS-managed encryption (SSE-S3 / AES256).
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Metadata – AWS Marketplace / CloudFormation console UX grouping
 # ──────────────────────────────────────────────────────────────────────────────
@@ -192,6 +212,7 @@ Conditions:
   EnableSSH: !And
     - !Condition HasKeyName
     - !Condition HasSSHLocation
+  HasKmsKey: !Not [!Equals [!Ref KmsKeyArn, '']]
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Metadata – AWS Marketplace / CloudFormation console UX grouping
@@ -225,6 +246,7 @@ Metadata:
           - MaxTradeNotional
           - MaxSharesPerTrade
           - RateLimitRPM
+          - EnableAllowlist
           - AllowedSymbols
           - BlockedSymbols
           - AllowedAssetClasses
@@ -233,6 +255,7 @@ Metadata:
         Parameters:
           - ObjectLockMode
           - ObjectLockRetentionDays
+          - KmsKeyArn
       - Label:
           default: "Instance Settings"
         Parameters:
@@ -266,6 +289,8 @@ Metadata:
         default: "Max Shares Per Trade"
       RateLimitRPM:
         default: "Rate Limit (Requests Per Minute)"
+      EnableAllowlist:
+        default: "Enable Allowlist Mode (Draconian)"
       AllowedSymbols:
         default: "Allowed Symbols"
       BlockedSymbols:
@@ -276,6 +301,8 @@ Metadata:
         default: "Audit log lock mode (NoLock/GOVERNANCE/COMPLIANCE)"
       ObjectLockRetentionDays:
         default: "Log retention period (days, 1-3650)"
+      KmsKeyArn:
+        default: "KMS Key ARN (BYOK, optional)"
       ForceReplacementToken:
         default: "Force Instance Replacement Token"
 
@@ -291,7 +318,7 @@ Resources:
       Name: !Sub "agent-provost-secret-${AWS::StackName}"
       Description: "Agent Provost runtime secrets (Alpaca keys + Provost token)"
       SecretString: !Sub |
-        {"ALPACA_API_KEY":"${AlpacaApiKey}","ALPACA_SECRET_KEY":"${AlpacaSecretKey}","ALPACA_PAPER_TRADE":"${AlpacaPaperTrade}","PROVOST_TOKEN":"${ProvostToken}","S3_BUCKET":"${LogsBucket}","AWS_REGION":"${AWS::Region}","MaxTradeNotional":${MaxTradeNotional},"MaxSharesPerTrade":${MaxSharesPerTrade},"RateLimitRPM":${RateLimitRPM},"AllowedSymbols":"${AllowedSymbols}","BlockedSymbols":"${BlockedSymbols}","AllowedAssetClasses":"${AllowedAssetClasses}"}
+        {"ALPACA_API_KEY":"${AlpacaApiKey}","ALPACA_SECRET_KEY":"${AlpacaSecretKey}","ALPACA_PAPER_TRADE":"${AlpacaPaperTrade}","PROVOST_TOKEN":"${ProvostToken}","S3_BUCKET":"${LogsBucket}","AWS_REGION":"${AWS::Region}","MaxTradeNotional":${MaxTradeNotional},"MaxSharesPerTrade":${MaxSharesPerTrade},"RateLimitRPM":${RateLimitRPM},"EnableAllowlist":"${EnableAllowlist}","AllowedSymbols":"${AllowedSymbols}","BlockedSymbols":"${BlockedSymbols}","AllowedAssetClasses":"${AllowedAssetClasses}"}
       Tags:
         - Key: Project
           Value: agent-provost
@@ -316,8 +343,11 @@ Resources:
         - !Ref AWS::NoValue
       BucketEncryption:
         ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: aws:kms
+          - ServerSideEncryptionByDefault: !If
+              - HasKmsKey
+              - SSEAlgorithm: aws:kms
+                KMSMasterKeyID: !Ref KmsKeyArn
+              - SSEAlgorithm: AES256
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -372,6 +402,41 @@ Resources:
       InstanceProfileName: !Sub "agent-provost-instance-profile-${AWS::StackName}"
       Roles:
         - !Ref InstanceRole
+
+  # ── 3a. KMS access policy for Fluent Bit (BYOK only) ──────────────────────
+  KmsAccessPolicy:
+    Type: AWS::IAM::Policy
+    Condition: HasKmsKey
+    Properties:
+      PolicyName: !Sub "agent-provost-kms-access-${AWS::StackName}"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowKmsEncryptLogsOnly
+            Effect: Allow
+            Action:
+              - kms:GenerateDataKey
+            Resource: !Ref KmsKeyArn
+      Roles:
+        - !Ref InstanceRole
+
+  # ── 3b. S3 bucket policy – enforce BYOK key on every PutObject ────────────
+  LogsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: HasKmsKey
+    Properties:
+      Bucket: !Ref LogsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyNonBYOKEncryption
+            Effect: Deny
+            Principal: '*'
+            Action: s3:PutObject
+            Resource: !Sub "${LogsBucket.Arn}/*"
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption-aws-kms-key-id: !Ref KmsKeyArn
 
   # ── 4. Lambda IAM Role (subnet lookup custom resource) ────────────────────
   SubnetLookupLambdaRole:
