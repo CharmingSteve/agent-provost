@@ -74,10 +74,10 @@ printf '%s\n' "${SECRET_STRING}" | jq '
       description: "Limit inbound request rate at the proxy boundary. Set rpm to 0 to disable.",
       params: { rpm: (.RateLimitRPM | to_num) }
     },
-    allowed_symbols: {
-      enabled: true,
-      description: "Allow trading only for symbols in this list.",
-      params: { symbols: (.AllowedSymbols | split_csv) }
+    allowed_tickers: {
+      enabled: (.EnableAllowlist == "true"),
+      description: "Draconian Mode: Block ALL trades except for those in this explicit allowlist.",
+      params: { tickers: (.AllowedSymbols | split_csv) }
     },
     blocked_tickers: {
       enabled: true,
