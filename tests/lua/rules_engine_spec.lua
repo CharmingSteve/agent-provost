@@ -304,6 +304,90 @@ describe("rules_engine: blocked_tickers rule", function()
 end)
 
 -- ---------------------------------------------------------------------------
+-- allowed_tickers rule
+-- ---------------------------------------------------------------------------
+describe("rules_engine: allowed_tickers rule", function()
+
+    local rules_enabled = {
+        allowed_tickers = {
+            enabled = true,
+            params  = { tickers = { "SPY", "QQQ" } }
+        }
+    }
+    local rules_disabled = {
+        allowed_tickers = {
+            enabled = false,
+            params  = { tickers = { "SPY", "QQQ" } }
+        }
+    }
+
+    -- DoD Test 1: allowlist disabled → any symbol passes
+    it("does NOT block when rule is disabled (AAPL passes through)", function()
+        local blocked = engine.check_request(make_parsed({ ticker = "AAPL" }), rules_disabled)
+        assert.is_false(blocked)
+    end)
+
+    -- DoD Test 2a: enabled, ticker in list → allowed
+    it("allows a ticker that IS in the allowlist (SPY)", function()
+        local blocked = engine.check_request(make_parsed({ ticker = "SPY" }), rules_enabled)
+        assert.is_false(blocked)
+    end)
+
+    it("allows a ticker that IS in the allowlist (QQQ)", function()
+        local blocked = engine.check_request(make_parsed({ ticker = "QQQ" }), rules_enabled)
+        assert.is_false(blocked)
+    end)
+
+    -- DoD Test 2b: enabled, ticker NOT in list → blocked
+    it("blocks a ticker NOT in the allowlist (AAPL)", function()
+        local blocked, reason = engine.check_request(make_parsed({ ticker = "AAPL" }), rules_enabled)
+        assert.is_true(blocked)
+        assert.is_string(reason)
+        assert.truthy(reason:find("PROVOST_INTERVENTION"))
+        assert.truthy(reason:find("AAPL"))
+        assert.truthy(reason:find("not in the allowed symbol list"))
+    end)
+
+    -- Case-insensitive matching
+    it("allows a ticker in lowercase that matches an uppercase entry (spy → SPY)", function()
+        local blocked = engine.check_request(make_parsed({ ticker = "spy" }), rules_enabled)
+        assert.is_false(blocked)
+    end)
+
+    -- Fail-open for requests with no ticker field
+    it("does not block when ticker field is absent (fail-open for non-trade tools)", function()
+        local blocked = engine.check_request(make_parsed({ quantity = 5 }), rules_enabled)
+        assert.is_false(blocked)
+    end)
+
+    -- Invalid ticker type is rejected
+    it("blocks when ticker field is a non-string type", function()
+        local blocked, reason = engine.check_request(make_parsed({ ticker = 123 }), rules_enabled)
+        assert.is_true(blocked)
+        assert.truthy(reason:find("Invalid ticker type"))
+    end)
+
+    -- Priority: allowed_tickers fires before blocked_tickers
+    it("blocks via allowlist rule (not blocklist) when allowlist is enabled", function()
+        local both_rules = {
+            allowed_tickers = { enabled = true, params = { tickers = { "SPY" } } },
+            blocked_tickers = { enabled = true, params = { tickers = { "AAPL" } } }
+        }
+        local blocked, reason = engine.check_request(make_parsed({ ticker = "AAPL" }), both_rules)
+        assert.is_true(blocked)
+        assert.truthy(reason:find("not in the allowed symbol list"))
+    end)
+
+    -- symbol field alias is also normalised
+    it("blocks via symbol field alias when ticker NOT in allowlist", function()
+        local blocked, reason = engine.check_request(make_parsed({ symbol = "TSLA" }), rules_enabled)
+        assert.is_true(blocked)
+        assert.truthy(reason:find("TSLA"))
+    end)
+
+end)
+
+-- ---------------------------------------------------------------------------
 -- Both rules active simultaneously
 -- ---------------------------------------------------------------------------
 describe("rules_engine: multiple rules active", function()

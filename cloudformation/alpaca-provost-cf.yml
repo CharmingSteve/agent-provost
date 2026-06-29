@@ -91,10 +91,22 @@ Parameters:
       Corporate Pro accounts can set this higher (for example up to 10000).
       Set to 0 to disable this inbound RPM guardrail.
 
+  EnableAllowlist:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'false'
+      - 'true'
+    Description: >
+      Enable allowlist (draconian) mode. When true, ONLY symbols listed in
+      AllowedSymbols can be traded. All others are blocked. Disabled by default.
+
   AllowedSymbols:
     Type: String
     Default: "SPY,QQQ,AAPL,MSFT"
-    Description: "Comma-separated list of allowed symbols"
+    Description: >
+      Comma-separated list of allowed symbols. Only enforced when EnableAllowlist
+      is set to true. Has no effect when EnableAllowlist is false.
 
   BlockedSymbols:
     Type: String
@@ -225,6 +237,7 @@ Metadata:
           - MaxTradeNotional
           - MaxSharesPerTrade
           - RateLimitRPM
+          - EnableAllowlist
           - AllowedSymbols
           - BlockedSymbols
           - AllowedAssetClasses
@@ -266,6 +279,8 @@ Metadata:
         default: "Max Shares Per Trade"
       RateLimitRPM:
         default: "Rate Limit (Requests Per Minute)"
+      EnableAllowlist:
+        default: "Enable Allowlist Mode (Draconian)"
       AllowedSymbols:
         default: "Allowed Symbols"
       BlockedSymbols:
@@ -291,7 +306,7 @@ Resources:
       Name: !Sub "agent-provost-secret-${AWS::StackName}"
       Description: "Agent Provost runtime secrets (Alpaca keys + Provost token)"
       SecretString: !Sub |
-        {"ALPACA_API_KEY":"${AlpacaApiKey}","ALPACA_SECRET_KEY":"${AlpacaSecretKey}","ALPACA_PAPER_TRADE":"${AlpacaPaperTrade}","PROVOST_TOKEN":"${ProvostToken}","S3_BUCKET":"${LogsBucket}","AWS_REGION":"${AWS::Region}","MaxTradeNotional":${MaxTradeNotional},"MaxSharesPerTrade":${MaxSharesPerTrade},"RateLimitRPM":${RateLimitRPM},"AllowedSymbols":"${AllowedSymbols}","BlockedSymbols":"${BlockedSymbols}","AllowedAssetClasses":"${AllowedAssetClasses}"}
+        {"ALPACA_API_KEY":"${AlpacaApiKey}","ALPACA_SECRET_KEY":"${AlpacaSecretKey}","ALPACA_PAPER_TRADE":"${AlpacaPaperTrade}","PROVOST_TOKEN":"${ProvostToken}","S3_BUCKET":"${LogsBucket}","AWS_REGION":"${AWS::Region}","MaxTradeNotional":${MaxTradeNotional},"MaxSharesPerTrade":${MaxSharesPerTrade},"RateLimitRPM":${RateLimitRPM},"EnableAllowlist":"${EnableAllowlist}","AllowedSymbols":"${AllowedSymbols}","BlockedSymbols":"${BlockedSymbols}","AllowedAssetClasses":"${AllowedAssetClasses}"}
       Tags:
         - Key: Project
           Value: agent-provost

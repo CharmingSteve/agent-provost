@@ -42,6 +42,13 @@
       "tickers": ["GME", "AMC", "BBBY"]
     }
   },
+  "allowed_tickers": {
+    "enabled": false,
+    "description": "Draconian Mode: Block ALL trades except for those in this explicit allowlist.",
+    "params": {
+      "tickers": ["SPY", "QQQ"]
+    }
+  },
   "allowed_asset_classes": {
     "enabled": true,
     "description": "Allow trading only for listed asset classes.",
