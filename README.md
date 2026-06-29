@@ -517,6 +517,49 @@ The CloudFormation template now supports three S3 Object Lock modes for audit lo
 
 ---
 
+### S3 Audit Log Encryption — Bring Your Own Key (BYOK)
+
+By default, Agent Provost encrypts audit logs using **AWS-managed encryption (SSE-S3 / AES256)**. Enterprise users — including EU funds subject to DORA or institutions requiring explicit control over encryption key material — can supply their own AWS KMS Customer Managed Key (CMK) using the optional `KmsKeyArn` parameter.
+
+#### How to enable BYOK
+
+1. Create a KMS Customer Managed Key in the same AWS region as your Agent Provost stack. Copy its ARN (e.g. `arn:aws:kms:us-east-1:123456789012:key/mrk-abc123...`).
+2. At stack creation (or update), set the **KMS Key ARN (BYOK, optional)** parameter to that ARN. Leave it blank to keep the default AES256 behaviour.
+
+#### What the template configures automatically when a key is provided
+
+| Layer | Resource | Effect |
+|---|---|---|
+| **Encryption default** | `LogsBucket` (`BucketEncryption`) | Sets `aws:kms` + your key as the default SSE algorithm for all new objects. |
+| **IAM (write-only)** | `KmsAccessPolicy` (attached to `InstanceRole`) | Grants the EC2 instance `kms:GenerateDataKey` — the minimum permission needed for Fluent Bit to encrypt log writes. `kms:Decrypt` is intentionally excluded; the instance must never be able to read back encrypted log data. |
+| **Enforcement guardrail** | `LogsBucketPolicy` (`S3::BucketPolicy`) | Denies any `s3:PutObject` request that does not specify your exact KMS key ARN in the `x-amz-server-side-encryption-aws-kms-key-id` header. This physically rejects any upload using a different key or no key at all. |
+
+These three layers create a **closed loop of security**: IAM gives the instance the ability to use the key; bucket encryption sets the default; the bucket policy enforces it as mandatory.
+
+#### Key Policy requirement
+
+Your KMS key's **resource-based key policy** must grant the EC2 instance role permission to call `kms:GenerateDataKey`. The minimum addition to your key policy is:
+
+```json
+{
+  "Sid": "AllowAgentProvostEncrypt",
+  "Effect": "Allow",
+  "Principal": {
+    "AWS": "arn:aws:iam::<ACCOUNT_ID>:role/agent-provost-instance-role-<STACK_NAME>"
+  },
+  "Action": "kms:GenerateDataKey",
+  "Resource": "*"
+}
+```
+
+Replace `<ACCOUNT_ID>` and `<STACK_NAME>` with your values.
+
+#### Removing BYOK
+
+To revert to AWS-managed encryption, update the stack and clear the `KmsKeyArn` parameter. The `KmsAccessPolicy` and `LogsBucketPolicy` resources are deleted automatically. Note: existing objects in S3 are not re-encrypted; only new writes will use AES256.
+
+---
+
 ## AWS CloudTrail and CloudWatch — Deployment Security Note
 
 When you deploy Agent Provost using the CloudFormation template, you supply your Alpaca API key, Alpaca secret key, and Provost token as stack parameters. Those parameters are marked `NoEcho: true`, which prevents them from being displayed in the CloudFormation console and most AWS tooling surfaces.
