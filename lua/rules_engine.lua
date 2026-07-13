@@ -15,10 +15,216 @@
 --   if blocked then ... end
 
 local _M = {}
+local cjson = require("cjson.safe")
 
 -- Fallback limit used when max_trade_size rule is enabled but params.limit
 -- is absent or non-numeric.
 local DEFAULT_TRADE_SIZE_LIMIT = 100
+
+local function normalize_http_method(value)
+    if type(value) ~= "string" then
+        return ""
+    end
+    return value:upper()
+end
+
+local function normalize_http_path(value)
+    if type(value) ~= "string" then
+        return ""
+    end
+    local path = value:gsub("%z", "")
+    local query_start = path:find("?", 1, true)
+    if query_start then
+        path = path:sub(1, query_start - 1)
+    end
+    return path
+end
+
+local function bool_from_rule(rule)
+    if type(rule) ~= "table" then
+        return false
+    end
+    if type(rule.enabled) == "boolean" then
+        return rule.enabled
+    end
+    if type(rule.enabled) == "string" then
+        return rule.enabled:lower() == "true"
+    end
+    return false
+end
+
+local function parse_json_body(raw)
+    if type(raw) ~= "string" or raw == "" then
+        return {}
+    end
+    local decoded = cjson.decode(raw)
+    if type(decoded) == "table" then
+        return decoded
+    end
+    return {}
+end
+
+local function parse_method_path(entry)
+    if type(entry) ~= "string" then
+        return nil, nil
+    end
+
+    local normalized = entry:gsub("^%s+", ""):gsub("%s+$", "")
+    if normalized == "" then
+        return nil, nil
+    end
+
+    local method, path = normalized:match("^(%u+)%s+(.+)$")
+    if not method or not path then
+        return nil, nil
+    end
+
+    return method, path:gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function build_pattern(template)
+    if type(template) ~= "string" or template == "" then
+        return nil
+    end
+
+    local pattern = template
+        :gsub("{account_id}", "__ACCOUNT_ID__")
+        :gsub("{portfolio_id}", "__PORTFOLIO_ID__")
+        :gsub("{order_id}", "__ORDER_ID__")
+        :gsub("{symbol}", "__SYMBOL__")
+
+    pattern = pattern:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+    pattern = pattern
+        :gsub("__ACCOUNT_ID__", "[%%w%%-]+")
+        :gsub("__PORTFOLIO_ID__", "[%%w%%-]+")
+        :gsub("__ORDER_ID__", "[%%w%%-]+")
+        :gsub("__SYMBOL__", "[%%w%%-%%./]+")
+
+    return "^" .. pattern .. "$"
+end
+
+local function is_forbidden(method, path, forbidden_list)
+    if type(forbidden_list) ~= "table" then
+        return false
+    end
+
+    local normalized_method = normalize_http_method(method)
+    local normalized_path = normalize_http_path(path)
+    if normalized_method == "" or normalized_path == "" then
+        return false
+    end
+
+    for _, entry in ipairs(forbidden_list) do
+        local entry_method, entry_path = parse_method_path(entry)
+        if entry_method == normalized_method and entry_path then
+            local pattern = build_pattern(entry_path)
+            if pattern and normalized_path:match(pattern) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function extract_account_id(path)
+    if type(path) ~= "string" then
+        return nil
+    end
+    return path:match("^/v1/trading/accounts/([%w%-]+)/")
+end
+
+local function extract_order_id(path)
+    if type(path) ~= "string" then
+        return nil
+    end
+    local order_id = path:match("^/v2/orders/([%w%-]+)$")
+    if order_id then
+        return order_id
+    end
+    return path:match("^/v1/trading/accounts/[%w%-]+/orders/([%w%-]+)$")
+end
+
+local function extract_symbol(path)
+    if type(path) ~= "string" then
+        return nil
+    end
+    local symbol = path:match("^/v2/positions/(.+)$")
+    if symbol and symbol ~= "" then
+        return symbol
+    end
+    symbol = path:match("^/v1/trading/accounts/[%w%-]+/positions/(.+)$")
+    if symbol and symbol ~= "" then
+        return symbol
+    end
+    return nil
+end
+
+local function normalize_symbol(value)
+    if type(value) ~= "string" then
+        return ""
+    end
+    return value:gsub("^%s+", ""):gsub("%s+$", ""):upper()
+end
+
+local function ticker_allowed(symbol, list)
+    if type(list) ~= "table" then
+        return true
+    end
+    local normalized_symbol = normalize_symbol(symbol)
+    if normalized_symbol == "" then
+        return false
+    end
+    for _, candidate in ipairs(list) do
+        if normalize_symbol(candidate) == normalized_symbol then
+            return true
+        end
+    end
+    return false
+end
+
+local function compute_order_notional(payload)
+    if type(payload) ~= "table" then
+        return nil
+    end
+    local notional = tonumber(payload.notional)
+    if notional and notional > 0 then
+        return notional
+    end
+
+    local qty = tonumber(payload.qty) or tonumber(payload.quantity)
+    local limit_price = tonumber(payload.limit_price)
+    if qty and qty > 0 and limit_price and limit_price > 0 then
+        return qty * limit_price
+    end
+    return nil
+end
+
+local function compute_position_notional(payload)
+    if type(payload) ~= "table" then
+        return nil
+    end
+
+    local market_value = tonumber(payload.market_value)
+    if market_value then
+        return math.abs(market_value)
+    end
+
+    local qty = tonumber(payload.qty)
+    local current_price = tonumber(payload.current_price)
+    if qty and current_price then
+        return math.abs(qty * current_price)
+    end
+
+    return nil
+end
+
+local function fetch_json(context, route, endpoint)
+    if type(context) ~= "table" or type(context.http_fetch_json) ~= "function" then
+        return nil, "fetch_unavailable"
+    end
+    return context.http_fetch_json(route, endpoint)
+end
 
 local function normalize_identifier(value)
     if type(value) ~= "string" then
@@ -545,5 +751,133 @@ function _M.check_request(parsed, rules, context)
 
     return false, nil
 end
+
+function _M.check_http_request(method, path, raw_body, rules, context)
+    rules = rules or {}
+    context = resolve_context(context)
+
+    local http_method = normalize_http_method(method)
+    local http_path = normalize_http_path(path)
+    local body = parse_json_body(raw_body)
+
+    if http_method == "" or http_path == "" then
+        return false, nil
+    end
+
+    local forbidden_rule = rules.forbidden_tools
+    if bool_from_rule(forbidden_rule)
+       and type(forbidden_rule.params) == "table"
+       and type(forbidden_rule.params.tools) == "table"
+       and is_forbidden(http_method, http_path, forbidden_rule.params.tools) then
+        return true, "PROVOST_INTERVENTION: Forbidden Endpoint"
+    end
+
+    local broker_account_id = extract_account_id(http_path)
+    if broker_account_id then
+        if type(context) ~= "table" or type(context.get_account_id) ~= "function" then
+            return true, "PROVOST_INTERVENTION: Account ID Discovery Failed"
+        end
+
+        local discovered_account_id, discover_err = context.get_account_id()
+        if not discovered_account_id or discovered_account_id == "" then
+            return true, "PROVOST_INTERVENTION: Account ID Discovery Failed"
+        end
+
+        if discover_err and discover_err ~= "" then
+            return true, "PROVOST_INTERVENTION: Account ID Discovery Failed"
+        end
+
+        if broker_account_id ~= discovered_account_id then
+            return true, "PROVOST_INTERVENTION: Account ID Mismatch"
+        end
+    end
+
+    local order_id = extract_order_id(http_path)
+    if http_method == "PATCH" and order_id then
+        local route = broker_account_id and "broker" or "trading"
+        local order_endpoint = route == "broker"
+            and ("/v1/trading/accounts/" .. broker_account_id .. "/orders/" .. order_id)
+            or ("/v2/orders/" .. order_id)
+
+        local original_order, fetch_err = fetch_json(context, route, order_endpoint)
+        if not original_order then
+            return true, "PROVOST_INTERVENTION: Order Lookup Failed"
+        end
+
+        local replace_notional = compute_order_notional(body)
+        local original_notional = compute_order_notional(original_order)
+
+        local max_replace_rule = rules.max_replace_notional
+        if bool_from_rule(max_replace_rule)
+           and type(max_replace_rule.params) == "table" then
+            local limit = tonumber(max_replace_rule.params.limit)
+            if limit and replace_notional and replace_notional > limit then
+                return true, "PROVOST_INTERVENTION: Replace Notional Exceeds Limit"
+            end
+        end
+
+        if replace_notional and original_notional and replace_notional > original_notional then
+            return true, "PROVOST_INTERVENTION: Replace Notional Exceeds Original"
+        end
+
+        local market_upgrade_rule = rules.prevent_market_order_upgrade
+        if bool_from_rule(market_upgrade_rule) then
+            local original_type = type(original_order.type) == "string" and original_order.type:lower() or ""
+            local replacement_type = ""
+            if type(body.type) == "string" then
+                replacement_type = body.type:lower()
+            elseif type(body.order_type) == "string" then
+                replacement_type = body.order_type:lower()
+            end
+
+            if original_type == "limit" and replacement_type == "market" then
+                return true, "PROVOST_INTERVENTION: Market Order Upgrade Not Allowed"
+            end
+        end
+    end
+
+    local symbol = extract_symbol(http_path)
+    if http_method == "DELETE" and symbol and http_path ~= "/v2/positions" then
+        local allowed_close_rule = rules.allowed_close_tickers
+        if bool_from_rule(allowed_close_rule)
+           and type(allowed_close_rule.params) == "table"
+           and type(allowed_close_rule.params.tickers) == "table"
+           and not ticker_allowed(symbol, allowed_close_rule.params.tickers) then
+            return true, "PROVOST_INTERVENTION: Symbol Not Allowed for Close"
+        end
+
+        local route = broker_account_id and "broker" or "trading"
+        local position_endpoint = route == "broker"
+            and ("/v1/trading/accounts/" .. broker_account_id .. "/positions/" .. symbol)
+            or ("/v2/positions/" .. symbol)
+
+        local position_payload = fetch_json(context, route, position_endpoint)
+        if not position_payload then
+            return true, "PROVOST_INTERVENTION: Position Lookup Failed"
+        end
+
+        local close_notional = compute_position_notional(position_payload)
+        local max_close_rule = rules.max_close_notional
+        if bool_from_rule(max_close_rule)
+           and type(max_close_rule.params) == "table" then
+            local limit = tonumber(max_close_rule.params.limit)
+            if limit and close_notional and close_notional > limit then
+                return true, "PROVOST_INTERVENTION: Close Notional Exceeds Limit"
+            end
+        end
+    end
+
+    if http_method == "POST"
+       and http_path:match("^/v1/trading/accounts/[%w%-]+/options/donotexercise$")
+       and type(context) == "table"
+       and type(context.audit_event) == "function" then
+        context.audit_event("PROVOST_DNE_AUDIT", "DNE request allowed and recorded")
+    end
+
+    return false, nil
+end
+
+_M.build_pattern = build_pattern
+_M.is_forbidden = is_forbidden
 
 return _M

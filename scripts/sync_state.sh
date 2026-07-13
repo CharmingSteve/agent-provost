@@ -58,6 +58,11 @@ printf '%s\n' "${SECRET_STRING}" | jq '
     | map(select(length > 0));
   def to_num:
     if type == "number" then . else tonumber end;
+  def to_bool:
+    if type == "boolean" then .
+    elif type == "string" then ascii_downcase == "true"
+    else false
+    end;
   {
     max_trade_size: {
       enabled: true,
@@ -88,6 +93,36 @@ printf '%s\n' "${SECRET_STRING}" | jq '
       enabled: true,
       description: "Allow trading only for listed asset classes.",
       params: { classes: (.AllowedAssetClasses | split_csv) }
+    },
+    forbidden_tools: {
+      enabled: true,
+      description: "Hard-block method+path endpoint templates before rule-based checks.",
+      params: { tools: (.ForbiddenTools | split_csv) }
+    },
+    max_replace_notional: {
+      enabled: true,
+      description: "Block order replacement requests when replacement notional exceeds policy limit.",
+      params: { limit: (.MaxReplaceNotional | to_num) }
+    },
+    prevent_market_order_upgrade: {
+      enabled: (.PreventMarketOrderUpgrade | to_bool),
+      description: "Block replacing limit orders with market orders.",
+      params: { enabled: (.PreventMarketOrderUpgrade | to_bool) }
+    },
+    max_close_notional: {
+      enabled: true,
+      description: "Block close-position requests above configured notional limit.",
+      params: { limit: (.MaxCloseNotional | to_num) }
+    },
+    allowed_close_tickers: {
+      enabled: true,
+      description: "Allow close-position requests only for configured symbols.",
+      params: { tickers: (.AllowedCloseTickers | split_csv) }
+    },
+    log_dne_requests: {
+      enabled: (.LogDNERequests | to_bool),
+      description: "Allow but audit do-not-exercise broker requests.",
+      params: { enabled: (.LogDNERequests | to_bool) }
     }
   }
 ' >/opt/agent-provost/rules.json

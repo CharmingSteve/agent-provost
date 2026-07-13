@@ -56,6 +56,71 @@
       "classes": ["us_equity", "crypto", "us_option"]
     }
   },
+  "forbidden_tools": {
+    "enabled": true,
+    "description": "Hard-block method+path endpoint templates before rule-based checks.",
+    "params": {
+      "tools": [
+        "DELETE /v2/positions",
+        "DELETE /v2/orders",
+        "DELETE /v1/trading/accounts/{account_id}/orders",
+        "DELETE /v1/trading/accounts/{account_id}/positions",
+        "POST /v1/transfers",
+        "POST /v1/journals",
+        "POST /v1/journals/batch",
+        "POST /v1/journals/reverse_batch",
+        "POST /v1/funding_wallets/withdrawals",
+        "POST /v1/crypto/wallets/withdrawals",
+        "POST /v1/crypto/wallets/whitelisted_addresses",
+        "POST /v1/instant_funding",
+        "POST /v1/trading/accounts/{account_id}/options/exercise",
+        "PATCH /v2/account/configurations",
+        "PATCH /v1/trading/accounts/{account_id}/account/configurations",
+        "POST /v1/rebalancing/runs",
+        "POST /v1/rebalancing/portfolios",
+        "PATCH /v1/rebalancing/portfolios/{portfolio_id}",
+        "POST /v1/rebalancing/subscriptions",
+        "POST /v1/crypto/perps/wallets/withdrawals",
+        "POST /v1/crypto/perps/wallets/whitelisted_addresses",
+        "POST /v1/crypto/perps/leverage"
+      ]
+    }
+  },
+  "max_replace_notional": {
+    "enabled": true,
+    "description": "Block order replacement requests when replacement notional exceeds policy limit.",
+    "params": {
+      "limit": 10000
+    }
+  },
+  "prevent_market_order_upgrade": {
+    "enabled": true,
+    "description": "Block replacing limit orders with market orders.",
+    "params": {
+      "enabled": true
+    }
+  },
+  "max_close_notional": {
+    "enabled": true,
+    "description": "Block close-position requests above configured notional limit.",
+    "params": {
+      "limit": 10000
+    }
+  },
+  "allowed_close_tickers": {
+    "enabled": true,
+    "description": "Allow close-position requests only for configured symbols.",
+    "params": {
+      "tickers": ["AAPL", "MSFT", "ETH/USD"]
+    }
+  },
+  "log_dne_requests": {
+    "enabled": true,
+    "description": "Allow but audit do-not-exercise broker requests.",
+    "params": {
+      "enabled": true
+    }
+  },
   "blocked_tool_names": {
     "enabled": false,
     "description": "Block specific MCP tool names regardless of field variation in the arguments.",

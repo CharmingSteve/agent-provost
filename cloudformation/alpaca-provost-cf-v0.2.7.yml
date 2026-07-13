@@ -1,0 +1,699 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Agent Provost – AWS Marketplace AMI product. Launches a single Graviton EC2
+  instance with least-privilege IAM, Secrets Manager integration, and an
+  audit-grade S3 log bucket.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ──────────────────────────────────────────────────────────────────────────────
+Parameters:
+
+  # ── Marketplace AMI ──────────────────────────────────────────────────────────
+  ImageId:
+    Type: AWS::EC2::Image::Id
+    Description: >
+      AMI ID injected by AWS Marketplace (do not change). The Marketplace
+      substitutes the correct regional Agent Provost golden AMI automatically.
+
+  # ── Networking ───────────────────────────────────────────────────────────────
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: ID of the existing VPC in which to launch the instance.
+
+  AssignPublicIp:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >
+      Set to true to associate a public IPv4 address with the instance
+      primary network interface.
+
+  # ── Compute ──────────────────────────────────────────────────────────────────
+  InstanceType:
+    Type: String
+    Default: t4g.micro
+    AllowedValues:
+      - t4g.micro
+      - t4g.small
+      - t4g.medium
+      - t4g.large
+    Description: >
+      Graviton (ARM64) instance size. Start with t4g.micro for evaluation and
+      scale up only if needed.
+
+  # ── Secrets ───────────────────────────────────────────────────────────────────
+  AlpacaApiKey:
+    Type: String
+    NoEcho: true
+    Description: Alpaca Markets API key (paper or live).
+
+  AlpacaSecretKey:
+    Type: String
+    NoEcho: true
+    Description: Alpaca Markets secret key (paper or live).
+
+  ProvostToken:
+    Type: String
+    NoEcho: true
+    Description: >
+      Bearer token used to authenticate requests to the Agent Provost proxy.
+      Choose a strong random value (e.g. openssl rand -hex 32).
+
+  AlpacaPaperTrade:
+    Type: String
+    Default: 'True'
+    AllowedValues:
+      - 'True'
+      - 'False'
+    Description: >
+      Set to True to route orders to Alpaca paper trading; False for live
+      trading. Defaults to True for safety.
+
+  MaxTradeNotional:
+    Type: Number
+    Default: 10000
+    Description: Maximum dollar notional allowed for a single trade.
+
+  MaxSharesPerTrade:
+    Type: Number
+    Default: 100
+    Description: Maximum number of shares allowed for a single trade.
+
+  RateLimitRPM:
+    Type: Number
+    Default: 60
+    Description: >
+      Maximum inbound requests per minute allowed through the proxy.
+      Set to 60 for standard accounts.
+      Corporate Pro accounts can set this higher (for example up to 10000).
+      Set to 0 to disable this inbound RPM guardrail.
+
+  EnableAllowlist:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'false'
+      - 'true'
+    Description: >
+      Enable allowlist (draconian) mode. When true, ONLY symbols listed in
+      AllowedSymbols can be traded. All others are blocked. Disabled by default.
+
+  AllowedSymbols:
+    Type: String
+    Default: "SPY,QQQ,AAPL,MSFT"
+    Description: >
+      Comma-separated list of allowed symbols. Only enforced when EnableAllowlist
+      is set to true. Has no effect when EnableAllowlist is false.
+
+  BlockedSymbols:
+    Type: String
+    Default: "GME,AMC"
+    Description: "Comma-separated list of blocked symbols"
+
+  AllowedAssetClasses:
+    Type: String
+    Default: "us_equity,crypto,us_option"
+    AllowedPattern: '^\s*(us_equity|crypto|us_option)\s*(,\s*(us_equity|crypto|us_option)\s*)*$'
+    ConstraintDescription: "Use comma-separated values from: us_equity, crypto, us_option"
+    Description: "Comma-separated list of allowed asset classes (valid: us_equity, crypto, us_option)"
+
+  ForbiddenTools:
+    Type: String
+    Default: "DELETE /v2/positions,DELETE /v2/orders,DELETE /v1/trading/accounts/{account_id}/orders,DELETE /v1/trading/accounts/{account_id}/positions,POST /v1/transfers,POST /v1/journals,POST /v1/journals/batch,POST /v1/journals/reverse_batch,POST /v1/funding_wallets/withdrawals,POST /v1/crypto/wallets/withdrawals,POST /v1/crypto/wallets/whitelisted_addresses,POST /v1/instant_funding,POST /v1/trading/accounts/{account_id}/options/exercise,PATCH /v2/account/configurations,PATCH /v1/trading/accounts/{account_id}/account/configurations,POST /v1/rebalancing/runs,POST /v1/rebalancing/portfolios,PATCH /v1/rebalancing/portfolios/{portfolio_id},POST /v1/rebalancing/subscriptions,POST /v1/crypto/perps/wallets/withdrawals,POST /v1/crypto/perps/wallets/whitelisted_addresses,POST /v1/crypto/perps/leverage"
+    Description: "Comma-separated METHOD + endpoint template entries that are hard-blocked by default."
+
+  MaxReplaceNotional:
+    Type: Number
+    Default: 10000
+    Description: "Maximum allowed replacement notional for PATCH order endpoints."
+
+  PreventMarketOrderUpgrade:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: "When true, blocks replacing a limit order with a market order."
+
+  MaxCloseNotional:
+    Type: Number
+    Default: 10000
+    Description: "Maximum allowed notional for close-position endpoints."
+
+  AllowedCloseTickers:
+    Type: String
+    Default: "AAPL,MSFT,ETH/USD"
+    Description: "Comma-separated symbols allowed for close-position endpoints."
+
+  LogDNERequests:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: "When true, logs do-not-exercise broker requests to audit trails."
+
+  # ── Timezone ──────────────────────────────────────────────────────────────
+  Timezone:
+    Type: String
+    Default: 'UTC'
+    Description: >
+      IANA timezone name (e.g. UTC, America/New_York, Asia/Jerusalem).
+      Applied at boot via timedatectl so S3 log timestamps match local time.
+
+  # ── SSH Access (optional) ─────────────────────────────────────────────────
+  KeyName:
+    Type: String
+    Default: ''
+    Description: >
+      Name of an existing EC2 KeyPair to enable SSH access to the instance.
+      Leave blank to disable SSH access entirely.
+
+  SSHLocation:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/(3[0-2]|[12]?[0-9])$'
+    ConstraintDescription: Must be blank or a valid IPv4 CIDR range such as 1.2.3.4/32.
+    Description: >
+      CIDR IP range permitted to reach port 22 (e.g. 1.2.3.4/32).
+      Only used when KeyName is provided. Leave blank to disable SSH.
+
+  MCPAccessLocation:
+    Type: String
+    AllowedPattern: '^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/(3[0-2]|[12]?[0-9])$'
+    ConstraintDescription: Must be a valid IPv4 CIDR range such as 1.2.3.4/32.
+    Description: >
+      CIDR IP range permitted to reach port 8088 for MCP/proxy access
+      (e.g. 1.2.3.4/32). 
+
+  ForceReplacementToken:
+    Type: String
+    Default: '1'
+    Description: >
+      Change this value (e.g., 1 to 2) to force CloudFormation to terminate 
+      the current EC2 instance and launch a brand new one.
+
+  # ── Log storage ───────────────────────────────────────────────────────────
+  ObjectLockMode:
+    Type: String
+    Default: 'NoLock'
+    AllowedValues:
+      - 'NoLock'
+      - 'GOVERNANCE'
+      - 'COMPLIANCE'
+    Description: |
+      S3 Object Lock mode for audit logs:
+        - NoLock: No immutability, deletions allowed by IAM policy.
+        - GOVERNANCE: Objects are WORM-locked, but privileged users (admins) can bypass retention and delete.
+        - COMPLIANCE: Objects are WORM-locked and cannot be deleted or altered by anyone (including admins) until retention expires. Required for SEC/FINRA/17a-4 compliance.
+      
+      Regulatory context:
+        - SEC Advisers Act Rule 204-2, FINRA 3110/4511, and similar require tamper-proof retention for books and records.
+        - Use COMPLIANCE mode for strict regulatory environments.
+        - Use GOVERNANCE for internal controls where admin override is acceptable.
+        - NoLock for dev/test or where immutability is not required.
+
+  ObjectLockRetentionDays:
+    Type: Number
+    Default: 90
+    MinValue: 1
+    MaxValue: 3650
+    Description: |
+      Retention period in days for audit logs (1 = 1 day, 3650 = ~10 years).
+      Only applied when ObjectLockMode is GOVERNANCE or COMPLIANCE. Ignored if NoLock.
+      In GOVERNANCE, admins can bypass retention. In COMPLIANCE, no one can delete/alter until expiry.
+
+  # ── Encryption (BYOK) ────────────────────────────────────────────────────
+  KmsKeyArn:
+    Type: String
+    Default: ''
+    Description: >
+      Optional: ARN of your existing KMS key for S3 log encryption (BYOK).
+      Leave blank to use AWS-managed encryption (SSE-S3 / AES256).
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Metadata – AWS Marketplace / CloudFormation console UX grouping
+# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Conditions
+# ──────────────────────────────────────────────────────────────────────────────
+Conditions:
+  ObjectLockEnabledCondition: !Not [!Equals [!Ref ObjectLockMode, 'NoLock']]
+  AssignPublicIpCondition: !Equals [!Ref AssignPublicIp, 'true']
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+  HasSSHLocation: !Not [!Equals [!Ref SSHLocation, '']]
+  EnableSSH: !And
+    - !Condition HasKeyName
+    - !Condition HasSSHLocation
+  HasKmsKey: !Not [!Equals [!Ref KmsKeyArn, '']]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Metadata – AWS Marketplace / CloudFormation console UX grouping
+# ──────────────────────────────────────────────────────────────────────────────
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Marketplace AMI"
+        Parameters:
+          - ImageId
+      - Label:
+          default: "Compute"
+        Parameters:
+          - InstanceType
+      - Label:
+          default: "Networking"
+        Parameters:
+          - VpcId
+          - AssignPublicIp
+      - Label:
+          default: "Secrets & Configuration"
+        Parameters:
+          - AlpacaApiKey
+          - AlpacaSecretKey
+          - ProvostToken
+          - AlpacaPaperTrade
+      - Label:
+          default: "Rules Engine"
+        Parameters:
+          - MaxTradeNotional
+          - MaxSharesPerTrade
+          - RateLimitRPM
+          - EnableAllowlist
+          - AllowedSymbols
+          - BlockedSymbols
+          - AllowedAssetClasses
+          - ForbiddenTools
+          - MaxReplaceNotional
+          - PreventMarketOrderUpgrade
+          - MaxCloseNotional
+          - AllowedCloseTickers
+          - LogDNERequests
+      - Label:
+          default: "Log Storage (S3)"
+        Parameters:
+          - ObjectLockMode
+          - ObjectLockRetentionDays
+          - KmsKeyArn
+      - Label:
+          default: "Instance Settings"
+        Parameters:
+          - Timezone
+          - MCPAccessLocation
+          - KeyName
+          - SSHLocation
+          - ForceReplacementToken
+    ParameterLabels:
+      ImageId:
+        default: "Agent Provost AMI ID"
+      VpcId:
+        default: "VPC"
+      AssignPublicIp:
+        default: "Assign Public IP"
+      InstanceType:
+        default: "Instance Type"
+      MCPAccessLocation:
+        default: "MCP Access CIDR (Port 8088)"
+      AlpacaApiKey:
+        default: "Alpaca API Key"
+      AlpacaSecretKey:
+        default: "Alpaca Secret Key"
+      ProvostToken:
+        default: "Provost Token"
+      AlpacaPaperTrade:
+        default: "Enable Paper Trading"
+      MaxTradeNotional:
+        default: "Max Trade Notional"
+      MaxSharesPerTrade:
+        default: "Max Shares Per Trade"
+      RateLimitRPM:
+        default: "Rate Limit (Requests Per Minute)"
+      EnableAllowlist:
+        default: "Enable Allowlist Mode (Draconian)"
+      AllowedSymbols:
+        default: "Allowed Symbols"
+      BlockedSymbols:
+        default: "Blocked Symbols"
+      AllowedAssetClasses:
+        default: "Allowed Asset Classes"
+      ForbiddenTools:
+        default: "Forbidden Endpoint Templates"
+      MaxReplaceNotional:
+        default: "Max Replace Notional"
+      PreventMarketOrderUpgrade:
+        default: "Prevent Market Upgrade"
+      MaxCloseNotional:
+        default: "Max Close Notional"
+      AllowedCloseTickers:
+        default: "Allowed Close Tickers"
+      LogDNERequests:
+        default: "Log Do-Not-Exercise Requests"
+      ObjectLockMode:
+        default: "Audit log lock mode (NoLock/GOVERNANCE/COMPLIANCE)"
+      ObjectLockRetentionDays:
+        default: "Log retention period (days, 1-3650)"
+      KmsKeyArn:
+        default: "KMS Key ARN (BYOK, optional)"
+      ForceReplacementToken:
+        default: "Force Instance Replacement Token"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resources
+# ──────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── 1. Secrets Manager secret ─────────────────────────────────────────────
+  AgentProvostSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "agent-provost-secret-${AWS::StackName}"
+      Description: "Agent Provost runtime secrets (Alpaca keys + Provost token)"
+      SecretString: !Sub |
+        {"ALPACA_API_KEY":"${AlpacaApiKey}","ALPACA_SECRET_KEY":"${AlpacaSecretKey}","ALPACA_PAPER_TRADE":"${AlpacaPaperTrade}","PROVOST_TOKEN":"${ProvostToken}","S3_BUCKET":"${LogsBucket}","AWS_REGION":"${AWS::Region}","MaxTradeNotional":${MaxTradeNotional},"MaxSharesPerTrade":${MaxSharesPerTrade},"RateLimitRPM":${RateLimitRPM},"EnableAllowlist":"${EnableAllowlist}","AllowedSymbols":"${AllowedSymbols}","BlockedSymbols":"${BlockedSymbols}","AllowedAssetClasses":"${AllowedAssetClasses}","ForbiddenTools":"${ForbiddenTools}","MaxReplaceNotional":${MaxReplaceNotional},"PreventMarketOrderUpgrade":"${PreventMarketOrderUpgrade}","MaxCloseNotional":${MaxCloseNotional},"AllowedCloseTickers":"${AllowedCloseTickers}","LogDNERequests":"${LogDNERequests}"}
+      Tags:
+        - Key: Project
+          Value: agent-provost
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ── 2. S3 bucket for Fluent Bit logs ──────────────────────────────────────
+  LogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "ap-logs-${AWS::AccountId}-${AWS::Region}-${AWS::StackName}"
+      ObjectLockEnabled: !If [ObjectLockEnabledCondition, true, false]
+      VersioningConfiguration:
+        Status: Enabled
+      ObjectLockConfiguration: !If
+        - ObjectLockEnabledCondition
+        - ObjectLockEnabled: Enabled
+          Rule:
+            DefaultRetention:
+              Mode: !Ref ObjectLockMode
+              Days: !Ref ObjectLockRetentionDays
+        - !Ref AWS::NoValue
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: !If
+              - HasKmsKey
+              - SSEAlgorithm: aws:kms
+                KMSMasterKeyID: !Ref KmsKeyArn
+              - SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: agent-provost
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ── 3. IAM role (least privilege) ─────────────────────────────────────────
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "agent-provost-instance-role-${AWS::StackName}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: AgentProvostLeastPrivilege
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadSecret
+                Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref AgentProvostSecret
+              - Sid: WriteLogs
+                Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub "${LogsBucket.Arn}/*"
+              - Sid: ReadOwnTags
+                Effect: Allow
+                Action: ec2:DescribeTags
+                Resource: "*"
+      Tags:
+        - Key: Project
+          Value: agent-provost
+        - Key: ManagedBy
+          Value: cloudformation
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "agent-provost-instance-profile-${AWS::StackName}"
+      Roles:
+        - !Ref InstanceRole
+
+  # ── 3a. KMS access policy for Fluent Bit (BYOK only) ──────────────────────
+  KmsAccessPolicy:
+    Type: AWS::IAM::Policy
+    Condition: HasKmsKey
+    Properties:
+      PolicyName: !Sub "agent-provost-kms-access-${AWS::StackName}"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowKmsEncryptLogsOnly
+            Effect: Allow
+            Action:
+              - kms:GenerateDataKey
+            Resource: !Ref KmsKeyArn
+      Roles:
+        - !Ref InstanceRole
+
+  # ── 3b. S3 bucket policy – enforce BYOK key on every PutObject ────────────
+  LogsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: HasKmsKey
+    Properties:
+      Bucket: !Ref LogsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyNonBYOKEncryption
+            Effect: Deny
+            Principal: '*'
+            Action: s3:PutObject
+            Resource: !Sub "${LogsBucket.Arn}/*"
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption-aws-kms-key-id: !Ref KmsKeyArn
+
+  # ── 4. Lambda IAM Role (subnet lookup custom resource) ────────────────────
+  SubnetLookupLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "agent-provost-subnet-lookup-role-${AWS::StackName}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SubnetLookupPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: DescribeInstanceTypeOfferings
+                Effect: Allow
+                Action: ec2:DescribeInstanceTypeOfferings
+                Resource: "*"
+              - Sid: DescribeSubnets
+                Effect: Allow
+                Action: ec2:DescribeSubnets
+                Resource: "*"
+      Tags:
+        - Key: Project
+          Value: agent-provost
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ── 4a. Lambda Log Group ────────────────────────────────────────────────────
+  SubnetLookupLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/agent-provost-subnet-lookup-${AWS::StackName}"
+      RetentionInDays: 1
+
+  # ── 4b. Lambda Function (subnet lookup) ───────────────────────────────────
+  SubnetLookupFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: SubnetLookupLogGroup
+    Properties:
+      FunctionName: !Sub "agent-provost-subnet-lookup-${AWS::StackName}"
+      Handler: index.handler
+      Role: !GetAtt SubnetLookupLambdaRole.Arn
+      Runtime: python3.12
+      Timeout: 30
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import logging
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def handler(event, context):
+              logger.info("Event: %s", event)
+              if event['RequestType'] == 'Delete':
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                  return
+              try:
+                  vpc_id = event['ResourceProperties']['VpcId']
+                  instance_type = event['ResourceProperties']['InstanceType']
+                  ec2 = boto3.client('ec2')
+
+                  # Find AZs that support the instance type in this region
+                  offerings = ec2.describe_instance_type_offerings(
+                      LocationType='availability-zone',
+                      Filters=[{'Name': 'instance-type', 'Values': [instance_type]}]
+                  )
+                  supported_azs = {o['Location'] for o in offerings['InstanceTypeOfferings']}
+                  logger.info("Supported AZs for %s: %s", instance_type, supported_azs)
+
+                  if not supported_azs:
+                      raise ValueError(f"No AZs support instance type {instance_type}")
+
+                  # Find subnets in the VPC that are in a supported AZ
+                  subnets_resp = ec2.describe_subnets(
+                      Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}]
+                  )
+                  for subnet in subnets_resp['Subnets']:
+                      if subnet['AvailabilityZone'] in supported_azs:
+                          subnet_id = subnet['SubnetId']
+                          logger.info("Selected SubnetId: %s (AZ: %s)", subnet_id, subnet['AvailabilityZone'])
+                          cfnresponse.send(event, context, cfnresponse.SUCCESS,
+                                           {'SubnetId': subnet_id}, subnet_id)
+                          return
+
+                  raise ValueError(f"No subnet in VPC {vpc_id} found in a supported AZ for {instance_type}")
+              except Exception as e:
+                  logger.error("Error: %s", str(e))
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+      Tags:
+        - Key: Project
+          Value: agent-provost
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ── 4c. Custom Resource – invoke subnet lookup ─────────────────────────────
+  SubnetLookup:
+    Type: Custom::SubnetLookup
+    Properties:
+      ServiceToken: !GetAtt SubnetLookupFunction.Arn
+      VpcId: !Ref VpcId
+      InstanceType: !Ref InstanceType
+
+  # ── 5. Security Group ──────────────────────────────────────────────────────
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Agent Provost - allow inbound port 8088 only; full outbound"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8088
+          ToPort: 8088
+          CidrIp: !Ref MCPAccessLocation
+          Description: "Agent Provost proxy HTTPS port"
+        - !If
+          - EnableSSH
+          - IpProtocol: tcp
+            FromPort: 22
+            ToPort: 22
+            CidrIp: !Ref SSHLocation
+            Description: "SSH access (restricted to SSHLocation CIDR)"
+          - !Ref AWS::NoValue
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+          Description: "Allow all outbound (internet access for Alpaca + AWS APIs)"
+      Tags:
+        - Key: Name
+          Value: !Sub "agent-provost-sg-${AWS::StackName}"
+        - Key: Project
+          Value: agent-provost
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ── 5. EC2 Instance ────────────────────────────────────────────────────────
+  ProvostInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref AWS::NoValue]
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !GetAtt SubnetLookup.SubnetId
+          GroupSet:
+            - !GetAtt InstanceSecurityGroup.GroupId
+          AssociatePublicIpAddress: !If [AssignPublicIpCondition, true, false]
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 16
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          # Runtime boot orchestration is baked into the AMI per-boot script.
+          # ForceReplacementToken: ${ForceReplacementToken}
+      Tags:
+        - Key: Name
+          Value: !Sub "agent-provost-${AWS::StackName}"
+        - Key: Project
+          Value: agent-provost
+        - Key: ManagedBy
+          Value: cloudformation
+        - Key: ProvostTimezone
+          Value: !Ref Timezone
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ──────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  InstanceId:
+    Description: EC2 Instance ID of the Agent Provost node
+    Value: !Ref ProvostInstance
+
+  InstancePrivateIp:
+    Description: Private IP address of the Agent Provost instance
+    Value: !GetAtt ProvostInstance.PrivateIp
+
+  ProxyEndpoint:
+    Description: >
+      Agent Provost proxy endpoint (accessible from within the VPC or via
+      a load balancer / VPN).
+    Value: !Sub "http://${ProvostInstance.PrivateIp}:8088"
+
+  SecretArn:
+    Description: ARN of the Secrets Manager secret that holds the runtime credentials
+    Value: !Ref AgentProvostSecret
+
+  LogsBucketName:
+    Description: Name of the S3 bucket receiving Fluent Bit audit logs
+    Value: !Ref LogsBucket
