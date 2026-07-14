@@ -121,13 +121,6 @@
       "enabled": true
     }
   },
-  "blocked_tool_names": {
-    "enabled": false,
-    "description": "Block specific MCP tool names regardless of field variation in the arguments.",
-    "params": {
-      "tools": ["place_stock_order", "place_option_order", "place_crypto_order"]
-    }
-  },
   "restricted_ticker_tool_rules": {
     "enabled": true,
     "description": "Block restricted ticker symbols when they are used by specific trade tools, regardless of argument field naming.",

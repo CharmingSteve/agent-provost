@@ -620,24 +620,6 @@ function _M.check_request(parsed, rules, context)
     end
 
     -- ----------------------------------------------------------------
-    -- Rule: blocked_tool_names
-    -- Blocks requests whose tool name is explicitly restricted.
-    -- ----------------------------------------------------------------
-    local tool_rule = rules.blocked_tool_names
-    if type(tool_rule) == "table" and tool_rule.enabled == true
-       and type(tool_rule.params) == "table"
-       and type(tool_rule.params.tools) == "table"
-       and tool_name ~= nil then
-        for _, blocked_tool in ipairs(tool_rule.params.tools) do
-            if tool_name == tostring(blocked_tool) then
-                return true,
-                    "PROVOST_INTERVENTION: Tool '" .. tool_name ..
-                    "' is on the restricted list."
-            end
-        end
-    end
-
-    -- ----------------------------------------------------------------
     -- Rule: restricted_ticker_tool_rules
     -- Blocks restricted symbols when used by specific order tools.
     -- ----------------------------------------------------------------
