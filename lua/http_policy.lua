@@ -81,6 +81,10 @@ local function normalize_policy_path(route, uri)
 end
 
 local function reject(detail)
+    local audit_error = require("audit_error")
+    audit_error.emit("provost_api_to_mcp_error", 403, "PROVOST_INTERVENTION", detail, {
+        request_id = ngx.var.provost_req_id,
+    })
     ngx.status = 403
     ngx.header["Content-Type"] = "application/json"
     local body = cjson.encode({
@@ -91,6 +95,7 @@ local function reject(detail)
     ngx.say(body)
     return ngx.exit(403)
 end
+
 
 local function fetch_json(route, endpoint)
     local api_key, secret_key = load_policy_credentials()
