@@ -24,7 +24,7 @@ if [ -z "$PROVOST_TOKEN" ]; then
   exit 1
 fi
 
-PROXY_URL="${PROXY_URL:-http://100.53.91.94:8088/mcp}"
+PROXY_URL="${PROXY_URL:-http://localhost:8088/mcp}"
 PROXY_BASE_URL="${PROXY_URL%/mcp}"
 PROVOST_USER="${PROVOST_USER:-steve@local}"
 PROVOST_MACHINE="${PROVOST_MACHINE:-demo-load-test}"
