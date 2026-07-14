@@ -3,6 +3,7 @@ set -euo pipefail
 
 CONTAINER_NAME="${PROVOST_CONTAINER:-agent-provost}"
 CLIENT_CONTAINER="${PROVOST_CLIENT_CONTAINER:-alpaca-mcp}"
+ENDPOINTS_FILE="${FORBIDDEN_ENDPOINTS_FILE:-./tests/forbidden_endpoints.txt}"
 
 if [[ -f .env ]]; then
   set -a
@@ -30,30 +31,12 @@ if ! docker ps --format '{{.Names}}' | grep -qx "$CLIENT_CONTAINER"; then
   exit 1
 fi
 
-read -r -d '' ENDPOINTS <<'EOF' || true
-DELETE /v2/positions
-DELETE /v2/orders
-DELETE /v1/trading/accounts/11111111-1111-1111-1111-111111111111/orders
-DELETE /v1/trading/accounts/11111111-1111-1111-1111-111111111111/positions
-POST /v1/transfers
-POST /v1/journals
-POST /v1/journals/batch
-POST /v1/journals/reverse_batch
-POST /v1/funding_wallets/withdrawals
-POST /v1/crypto/wallets/withdrawals
-POST /v1/crypto/wallets/whitelisted_addresses
-POST /v1/instant_funding
-POST /v1/trading/accounts/11111111-1111-1111-1111-111111111111/options/exercise
-PATCH /v2/account/configurations
-PATCH /v1/trading/accounts/11111111-1111-1111-1111-111111111111/account/configurations
-POST /v1/rebalancing/runs
-POST /v1/rebalancing/portfolios
-PATCH /v1/rebalancing/portfolios/portfolio-123
-POST /v1/rebalancing/subscriptions
-POST /v1/crypto/perps/wallets/withdrawals
-POST /v1/crypto/perps/wallets/whitelisted_addresses
-POST /v1/crypto/perps/leverage
-EOF
+if [[ ! -f "$ENDPOINTS_FILE" ]]; then
+  echo "forbidden endpoints file '$ENDPOINTS_FILE' is missing" >&2
+  exit 1
+fi
+
+ENDPOINTS="$(<"$ENDPOINTS_FILE")"
 
 failures=0
 
