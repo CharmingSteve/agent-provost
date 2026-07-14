@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - third-set-of-fixes
   pull_request:
     branches:
       - main
