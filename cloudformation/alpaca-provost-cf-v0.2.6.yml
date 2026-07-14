@@ -587,7 +587,10 @@ Resources:
       ImageId: !Ref ImageId
       InstanceType: !Ref InstanceType
       IamInstanceProfile: !Ref InstanceProfile
-      KeyName: !If [HasKeyName, !Ref KeyName, !Ref AWS::NoValue]
+      KeyName: !If
+        - HasKeyName
+        - !Ref KeyName
+        - !Ref AWS::NoValue
       NetworkInterfaces:
         - DeviceIndex: 0
           SubnetId: !GetAtt SubnetLookup.SubnetId
