@@ -245,6 +245,31 @@ send_request_expect_text() {
   fi
 }
 
+send_request_without_auth() {
+  local name="$1"
+  local payload="$2"
+  local expected_status="$3"
+  local status
+  local response
+
+  response="$(curl -s -w "\nHTTP:%{http_code}" \
+    -X POST "$PROXY_URL" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    -H "X-Provost-User: $PROVOST_USER" \
+    -H "X-Provost-Machine: $PROVOST_MACHINE" \
+    --data "$payload")"
+
+  status="$(printf '%s\n' "$response" | awk -F: '/^HTTP:/{print $2; exit}')"
+
+  if [[ ",${expected_status}," == *",${status},"* ]]; then
+    echo "[OK] $name (Expected $expected_status, Got $status)"
+  else
+    echo "[FAIL] $name (Expected $expected_status, Got $status)"
+    record_failure
+  fi
+}
+
 probe_visible_gap_case() {
   local tool_name="$1"
   local args_payload="$2"
@@ -378,20 +403,7 @@ sleep 2
 echo "=== Phase 3: Security attack (missing auth header) ==="
 for i in $(seq 1 10); do
   payload="$(build_order_payload "AAPL" "1" "buy")"
-  status="$(curl -s -o /dev/null -w "%{http_code}" \
-    -X POST "$PROXY_URL" \
-    -H "Content-Type: application/json" \
-    -H "Accept: application/json, text/event-stream" \
-    -H "X-Provost-User: $PROVOST_USER" \
-    -H "X-Provost-Machine: $PROVOST_MACHINE" \
-    --data "$payload")"
-
-  if [ "$status" = "401" ]; then
-    echo "[OK] Missing Auth #$i (Expected 401, Got $status)"
-  else
-    echo "[FAIL] Missing Auth #$i (Expected 401, Got $status)"
-    record_failure
-  fi
+  send_request_without_auth "Missing Auth #$i" "$payload" "401"
 done
 
 sleep 2
