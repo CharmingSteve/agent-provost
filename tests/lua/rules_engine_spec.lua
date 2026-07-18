@@ -39,6 +39,247 @@ describe("rules_engine: max_trade_size rule", function()
         assert.truthy(reason:find("PROVOST_INTERVENTION"))
     end)
 
+-- ---------------------------------------------------------------------------
+-- REST endpoint governance rules
+-- ---------------------------------------------------------------------------
+describe("rules_engine: http endpoint governance", function()
+
+    it("build_pattern matches dynamic account_id and symbol segments", function()
+        local pattern = engine.build_pattern("/v1/trading/accounts/{account_id}/positions/{symbol}")
+        assert.truthy(pattern)
+        assert.truthy(("/v1/trading/accounts/abc-123/positions/ETH/USD"):match(pattern))
+    end)
+
+    it("is_forbidden blocks method+path template matches", function()
+        local forbidden = {
+            "DELETE /v2/positions",
+            "DELETE /v1/trading/accounts/{account_id}/positions"
+        }
+
+        assert.is_true(engine.is_forbidden("DELETE", "/v2/positions", forbidden))
+        assert.is_true(engine.is_forbidden("DELETE", "/v1/trading/accounts/abc-123/positions", forbidden))
+        assert.is_false(engine.is_forbidden("GET", "/v2/positions", forbidden))
+    end)
+
+    it("blocks forbidden endpoint using forbidden_tools rule", function()
+        local rules = {
+            forbidden_tools = {
+                enabled = true,
+                params = { tools = { "DELETE /v2/positions" } }
+            }
+        }
+
+        local blocked, reason = engine.check_http_request("DELETE", "/v2/positions", "", rules, {})
+        assert.is_true(blocked)
+        assert.truthy(reason:find("Forbidden Endpoint"))
+    end)
+
+    it("blocks all default forbidden endpoint templates with real ids", function()
+        local rules = {
+            forbidden_tools = {
+                enabled = true,
+                params = {
+                    tools = {
+                        "DELETE /v2/positions",
+                        "DELETE /v2/orders",
+                        "DELETE /v1/trading/accounts/{account_id}/orders",
+                        "DELETE /v1/trading/accounts/{account_id}/positions",
+                        "POST /v1/transfers",
+                        "POST /v1/journals",
+                        "POST /v1/journals/batch",
+                        "POST /v1/journals/reverse_batch",
+                        "POST /v1/funding_wallets/withdrawals",
+                        "POST /v1/crypto/wallets/withdrawals",
+                        "POST /v1/crypto/wallets/whitelisted_addresses",
+                        "POST /v1/instant_funding",
+                        "POST /v1/trading/accounts/{account_id}/options/exercise",
+                        "PATCH /v2/account/configurations",
+                        "PATCH /v1/trading/accounts/{account_id}/account/configurations",
+                        "POST /v1/rebalancing/runs",
+                        "POST /v1/rebalancing/portfolios",
+                        "PATCH /v1/rebalancing/portfolios/{portfolio_id}",
+                        "POST /v1/rebalancing/subscriptions",
+                        "POST /v1/crypto/perps/wallets/withdrawals",
+                        "POST /v1/crypto/perps/wallets/whitelisted_addresses",
+                        "POST /v1/crypto/perps/leverage"
+                    }
+                }
+            }
+        }
+
+        local requests = {
+            { "DELETE", "/v2/positions" },
+            { "DELETE", "/v2/orders" },
+            { "DELETE", "/v1/trading/accounts/acct-123/orders" },
+            { "DELETE", "/v1/trading/accounts/acct-123/positions" },
+            { "POST", "/v1/transfers" },
+            { "POST", "/v1/journals" },
+            { "POST", "/v1/journals/batch" },
+            { "POST", "/v1/journals/reverse_batch" },
+            { "POST", "/v1/funding_wallets/withdrawals" },
+            { "POST", "/v1/crypto/wallets/withdrawals" },
+            { "POST", "/v1/crypto/wallets/whitelisted_addresses" },
+            { "POST", "/v1/instant_funding" },
+            { "POST", "/v1/trading/accounts/acct-123/options/exercise" },
+            { "PATCH", "/v2/account/configurations" },
+            { "PATCH", "/v1/trading/accounts/acct-123/account/configurations" },
+            { "POST", "/v1/rebalancing/runs" },
+            { "POST", "/v1/rebalancing/portfolios" },
+            { "PATCH", "/v1/rebalancing/portfolios/portfolio-99" },
+            { "POST", "/v1/rebalancing/subscriptions" },
+            { "POST", "/v1/crypto/perps/wallets/withdrawals" },
+            { "POST", "/v1/crypto/perps/wallets/whitelisted_addresses" },
+            { "POST", "/v1/crypto/perps/leverage" }
+        }
+
+        for _, req in ipairs(requests) do
+            local blocked, reason = engine.check_http_request(req[1], req[2], "{}", rules, {})
+            assert.is_true(blocked)
+            assert.truthy(reason:find("Forbidden Endpoint"))
+        end
+    end)
+
+    it("blocks broker request when URL account_id mismatches discovered account", function()
+        local rules = {}
+        local context = {
+            get_account_id = function()
+                return "real-account-id", nil
+            end
+        }
+
+        local blocked, reason = engine.check_http_request(
+            "PATCH",
+            "/v1/trading/accounts/wrong-account/orders/ord-1",
+            "{}",
+            rules,
+            context
+        )
+        assert.is_true(blocked)
+        assert.truthy(reason:find("Account ID Mismatch"))
+    end)
+
+    it("blocks replace notional above limit", function()
+        local rules = {
+            max_replace_notional = { enabled = true, params = { limit = 10000 } }
+        }
+        local context = {
+            http_fetch_json = function(_, _)
+                return { notional = 5000, type = "limit" }, nil
+            end
+        }
+
+        local blocked, reason = engine.check_http_request(
+            "PATCH",
+            "/v2/orders/ord-1",
+            '{"notional":12000,"type":"limit"}',
+            rules,
+            context
+        )
+        assert.is_true(blocked)
+        assert.truthy(reason:find("Replace Notional Exceeds Limit"))
+    end)
+
+    it("blocks replacement that upgrades limit order to market", function()
+        local rules = {
+            prevent_market_order_upgrade = { enabled = true, params = { enabled = true } }
+        }
+        local context = {
+            http_fetch_json = function(_, _)
+                return { notional = 2000, type = "limit" }, nil
+            end
+        }
+
+        local blocked, reason = engine.check_http_request(
+            "PATCH",
+            "/v2/orders/ord-1",
+            '{"notional":1800,"type":"market"}',
+            rules,
+            context
+        )
+        assert.is_true(blocked)
+        assert.truthy(reason:find("Market Order Upgrade Not Allowed"))
+    end)
+
+    it("blocks close position when symbol is not in allowed_close_tickers", function()
+        local rules = {
+            allowed_close_tickers = {
+                enabled = true,
+                params = { tickers = { "AAPL", "MSFT" } }
+            }
+        }
+        local context = {
+            http_fetch_json = function(_, _)
+                return { market_value = 1000 }, nil
+            end
+        }
+
+        local blocked, reason = engine.check_http_request(
+            "DELETE",
+            "/v2/positions/TSLA",
+            "",
+            rules,
+            context
+        )
+        assert.is_true(blocked)
+        assert.truthy(reason:find("Symbol Not Allowed for Close"))
+    end)
+
+    it("blocks close position when current notional exceeds max_close_notional", function()
+        local rules = {
+            max_close_notional = {
+                enabled = true,
+                params = { limit = 10000 }
+            },
+            allowed_close_tickers = {
+                enabled = true,
+                params = { tickers = { "AAPL", "MSFT" } }
+            }
+        }
+        local context = {
+            http_fetch_json = function(_, _)
+                return { market_value = 12500 }, nil
+            end
+        }
+
+        local blocked, reason = engine.check_http_request(
+            "DELETE",
+            "/v2/positions/AAPL",
+            "",
+            rules,
+            context
+        )
+
+        assert.is_true(blocked)
+        assert.truthy(reason:find("Close Notional Exceeds Limit"))
+    end)
+
+    it("allows and audits do-not-exercise requests", function()
+        local seen_audit = false
+        local context = {
+            get_account_id = function()
+                return "acct-1", nil
+            end,
+            audit_event = function(code, _)
+                if code == "PROVOST_DNE_AUDIT" then
+                    seen_audit = true
+                end
+            end
+        }
+
+        local blocked = engine.check_http_request(
+            "POST",
+            "/v1/trading/accounts/acct-1/options/donotexercise",
+            "{}",
+            {},
+            context
+        )
+
+        assert.is_false(blocked)
+        assert.is_true(seen_audit)
+    end)
+
+end)
+
     it("allows when quantity == limit (boundary: not strictly greater)", function()
         local blocked = engine.check_request(make_parsed({ quantity = 100 }), rules_enabled)
         assert.is_false(blocked)
@@ -159,48 +400,6 @@ end)
         assert.is_true(engine.check_request(make_parsed({ qty = 210.7, limit_price = 242 }), rules_value))
         assert.is_false(engine.check_request(make_parsed({ qty = 200, limit_price = 242 }), rules_value))
     end)
-
--- ---------------------------------------------------------------------------
--- blocked_tool_names rule
--- ---------------------------------------------------------------------------
-describe("rules_engine: blocked_tool_names rule", function()
-
-    local rules_enabled = {
-        blocked_tool_names = {
-            enabled = true,
-            params  = { tools = { "place_stock_order" } }
-        }
-    }
-
-    local rules_disabled = {
-        blocked_tool_names = {
-            enabled = false,
-            params  = { tools = { "place_stock_order" } }
-        }
-    }
-
-    it("blocks a disabled trade tool by exact tool name", function()
-        local blocked = engine.check_request(
-            make_parsed({ symbol = "GME", qty = "1" }, "place_stock_order"),
-            rules_enabled)
-        assert.is_true(blocked)
-    end)
-
-    it("allows a safe tool when rule is disabled", function()
-        local blocked = engine.check_request(
-            make_parsed({ symbol = "GME", qty = "1" }, "place_stock_order"),
-            rules_disabled)
-        assert.is_false(blocked)
-    end)
-
-    it("allows a different tool when not blocked", function()
-        local blocked = engine.check_request(
-            make_parsed({ symbol = "GME", qty = "1" }, "get_stock_bars"),
-            rules_enabled)
-        assert.is_false(blocked)
-    end)
-
-end)
 
 -- ---------------------------------------------------------------------------
 -- restricted_ticker_tool_rules rule

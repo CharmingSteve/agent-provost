@@ -173,14 +173,53 @@ See [`RULES_ENGINE.md`](RULES_ENGINE.md) for full documentation: JSON structure,
 | Rule | Default | Description |
 |---|---|---|
 | `max_trade_size` | **enabled**, limit = 100 | Blocks any `tools/call` with `quantity` or `qty` > 100 |
+| `max_trade_notional` | **enabled**, limit = 50000 | Blocks orders whose requested notional exceeds configured cap |
+| `cumulative_trade_notional` | **enabled**, limit = 50000 / 300s window | Blocks cumulative notional exposure in a rolling window |
+| `symbol_order_cooldown` | **enabled**, 300s window | Blocks repeat orders for the same symbol inside cooldown window |
 | `blocked_tickers` | **enabled**, list = GME/AMC/BBBY | Blocks trades on restricted ticker symbols using normalized symbol fields |
-| `blocked_tool_names` | disabled | Optional: block named trade tools regardless of argument syntax |
+| `allowed_tickers` | disabled (draconian) | When enabled, blocks any ticker not in explicit allowlist |
+| `allowed_asset_classes` | **enabled**, list = us_equity/crypto/us_option | Restricts trading to approved asset classes |
+| `forbidden_tools` | **enabled**, 22 method+path templates | Hard-blocks high-risk endpoints (bulk liquidate/cancel, withdrawals, journals, account config changes, rebalancing, perps leverage/withdrawals, options exercise) |
+| `max_replace_notional` | **enabled**, limit = 10000 | Blocks risky order replacement requests above notional cap |
+| `prevent_market_order_upgrade` | **enabled** | Blocks replacing limit orders with market orders |
+| `max_close_notional` | **enabled**, limit = 10000 | Blocks close-position requests above configured notional |
+| `allowed_close_tickers` | **enabled**, list = AAPL/MSFT/ETH/USD | Restricts close-position endpoints to approved symbols |
+| `log_dne_requests` | **enabled** | Allows do-not-exercise requests but logs them for audit |
 | `restricted_ticker_tool_rules` | **enabled**, list = GME/AMC/BBBY | Blocks restricted symbols when used by specific order tools |
 | `trading_window` | disabled | Placeholder: restrict trading to specific UTC hours |
 | `upstream_429_cooldown` | **enabled**, 60s | Blocks all inbound traffic with `429` while cooldown is active after upstream `429` |
 | `upstream_remaining_guard` | **enabled**, threshold = 10 | Blocks inbound traffic with `429` when upstream remaining quota falls below threshold |
 
 Blocked requests return either `403 Forbidden` (`PROVOST_INTERVENTION`) for policy violations or `429 Too Many Requests` for upstream-protection guardrails.
+
+Note: `blocked_tool_names` was intentionally removed from active runtime/docs/tests in this branch to avoid overlapping policy layers and reduce operator confusion; endpoint-level `forbidden_tools` remains the supported hard-block mechanism.
+
+### Default Forbidden Endpoint Templates (`ForbiddenTools`)
+
+By default, Agent Provost hard-blocks these outbound method+path templates:
+
+- `DELETE /v2/positions`
+- `DELETE /v2/orders`
+- `DELETE /v1/trading/accounts/{account_id}/orders`
+- `DELETE /v1/trading/accounts/{account_id}/positions`
+- `POST /v1/transfers`
+- `POST /v1/journals`
+- `POST /v1/journals/batch`
+- `POST /v1/journals/reverse_batch`
+- `POST /v1/funding_wallets/withdrawals`
+- `POST /v1/crypto/wallets/withdrawals`
+- `POST /v1/crypto/wallets/whitelisted_addresses`
+- `POST /v1/instant_funding`
+- `POST /v1/trading/accounts/{account_id}/options/exercise`
+- `PATCH /v2/account/configurations`
+- `PATCH /v1/trading/accounts/{account_id}/account/configurations`
+- `POST /v1/rebalancing/runs`
+- `POST /v1/rebalancing/portfolios`
+- `PATCH /v1/rebalancing/portfolios/{portfolio_id}`
+- `POST /v1/rebalancing/subscriptions`
+- `POST /v1/crypto/perps/wallets/withdrawals`
+- `POST /v1/crypto/perps/wallets/whitelisted_addresses`
+- `POST /v1/crypto/perps/leverage`
 
 ### Live Rule Update Example (no restart)
 
@@ -200,9 +239,18 @@ Because Agent Provost is completely stateless, updating these rules will safely 
 | Parameter | Description |
 | --- | --- |
 | `MaxTradeNotional` | The maximum dollar amount allowed for a single trade. |
-| `DailyNotionalLimit` | The total dollar amount the AI is allowed to trade per day. |
-| `BlockedTickers` | A comma-separated list of symbols the AI is forbidden from trading (e.g., `GME,AMC,DJT`). |
-| `AllowedAssetClasses` | The types of assets the AI can trade (e.g., `us_equity,crypto`). |
+| `MaxSharesPerTrade` | The maximum share quantity allowed for a single trade. |
+| `RateLimitRPM` | Proxy inbound request-per-minute limit (`0` disables this guardrail). |
+| `EnableAllowlist` | Enables draconian allowlist mode (block all symbols not explicitly allowed). |
+| `AllowedSymbols` | Comma-separated symbol allowlist used when `EnableAllowlist=true`. |
+| `BlockedSymbols` | Comma-separated symbol blocklist (for example `GME,AMC,BBBY`). |
+| `AllowedAssetClasses` | Comma-separated allowed classes (`us_equity,crypto,us_option`). |
+| `ForbiddenTools` | Comma-separated METHOD+path templates hard-blocked at the outbound policy layer. |
+| `MaxReplaceNotional` | Maximum allowed replacement-request notional for PATCH order endpoints. |
+| `PreventMarketOrderUpgrade` | When `true`, blocks replacing a limit order with a market order. |
+| `MaxCloseNotional` | Maximum allowed notional for close-position endpoints. |
+| `AllowedCloseTickers` | Comma-separated symbols allowed for close-position operations. |
+| `LogDNERequests` | Enables audit logging for do-not-exercise broker requests. |
 
 **How to Update:**
 1. Go to the **AWS CloudFormation Console**.

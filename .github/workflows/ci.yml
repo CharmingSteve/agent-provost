@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - third-set-of-fixes
   pull_request:
     branches:
       - main
@@ -470,6 +469,17 @@ jobs:
           PROVOST_VERIFY_SKIP_EVIDENCE_CHECK: "false"
           PROVOST_VERIFY_ALLOW_MCP_PROBE_FAILURE: "false"
         run: ./verify_proxy_routing.sh
+      - name: Run forbidden endpoint test
+        env:
+          BOOTSTRAP_MODE: runner
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          eval "$(sh bootstrap.sh runner)"
+          PROVOST_TOKEN="$(tr -d '\r\n' < "$PROVOST_SECRETS_DIR/provost_token")"
+          export PROVOST_TOKEN
+          ./tests/test_forbidden_endpoints.sh
       - name: Debug Container State
         if: always()
         run: |

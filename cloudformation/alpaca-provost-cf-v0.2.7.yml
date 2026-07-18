@@ -120,6 +120,42 @@ Parameters:
     ConstraintDescription: "Use comma-separated values from: us_equity, crypto, us_option"
     Description: "Comma-separated list of allowed asset classes (valid: us_equity, crypto, us_option)"
 
+  ForbiddenTools:
+    Type: String
+    Default: "DELETE /v2/positions,DELETE /v2/orders,DELETE /v1/trading/accounts/{account_id}/orders,DELETE /v1/trading/accounts/{account_id}/positions,POST /v1/transfers,POST /v1/journals,POST /v1/journals/batch,POST /v1/journals/reverse_batch,POST /v1/funding_wallets/withdrawals,POST /v1/crypto/wallets/withdrawals,POST /v1/crypto/wallets/whitelisted_addresses,POST /v1/instant_funding,POST /v1/trading/accounts/{account_id}/options/exercise,PATCH /v2/account/configurations,PATCH /v1/trading/accounts/{account_id}/account/configurations,POST /v1/rebalancing/runs,POST /v1/rebalancing/portfolios,PATCH /v1/rebalancing/portfolios/{portfolio_id},POST /v1/rebalancing/subscriptions,POST /v1/crypto/perps/wallets/withdrawals,POST /v1/crypto/perps/wallets/whitelisted_addresses,POST /v1/crypto/perps/leverage"
+    Description: "Comma-separated METHOD + endpoint template entries that are hard-blocked by default."
+
+  MaxReplaceNotional:
+    Type: Number
+    Default: 10000
+    Description: "Maximum allowed replacement notional for PATCH order endpoints."
+
+  PreventMarketOrderUpgrade:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: "When true, blocks replacing a limit order with a market order."
+
+  MaxCloseNotional:
+    Type: Number
+    Default: 10000
+    Description: "Maximum allowed notional for close-position endpoints."
+
+  AllowedCloseTickers:
+    Type: String
+    Default: "AAPL,MSFT,ETH/USD"
+    Description: "Comma-separated symbols allowed for close-position endpoints."
+
+  LogDNERequests:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: "When true, logs do-not-exercise broker requests to audit trails."
+
   # ── Timezone ──────────────────────────────────────────────────────────────
   Timezone:
     Type: String
@@ -250,6 +286,12 @@ Metadata:
           - AllowedSymbols
           - BlockedSymbols
           - AllowedAssetClasses
+          - ForbiddenTools
+          - MaxReplaceNotional
+          - PreventMarketOrderUpgrade
+          - MaxCloseNotional
+          - AllowedCloseTickers
+          - LogDNERequests
       - Label:
           default: "Log Storage (S3)"
         Parameters:
@@ -297,6 +339,18 @@ Metadata:
         default: "Blocked Symbols"
       AllowedAssetClasses:
         default: "Allowed Asset Classes"
+      ForbiddenTools:
+        default: "Forbidden Endpoint Templates"
+      MaxReplaceNotional:
+        default: "Max Replace Notional"
+      PreventMarketOrderUpgrade:
+        default: "Prevent Market Upgrade"
+      MaxCloseNotional:
+        default: "Max Close Notional"
+      AllowedCloseTickers:
+        default: "Allowed Close Tickers"
+      LogDNERequests:
+        default: "Log Do-Not-Exercise Requests"
       ObjectLockMode:
         default: "Audit log lock mode (NoLock/GOVERNANCE/COMPLIANCE)"
       ObjectLockRetentionDays:
@@ -318,7 +372,7 @@ Resources:
       Name: !Sub "agent-provost-secret-${AWS::StackName}"
       Description: "Agent Provost runtime secrets (Alpaca keys + Provost token)"
       SecretString: !Sub |
-        {"ALPACA_API_KEY":"${AlpacaApiKey}","ALPACA_SECRET_KEY":"${AlpacaSecretKey}","ALPACA_PAPER_TRADE":"${AlpacaPaperTrade}","PROVOST_TOKEN":"${ProvostToken}","S3_BUCKET":"${LogsBucket}","AWS_REGION":"${AWS::Region}","MaxTradeNotional":${MaxTradeNotional},"MaxSharesPerTrade":${MaxSharesPerTrade},"RateLimitRPM":${RateLimitRPM},"EnableAllowlist":"${EnableAllowlist}","AllowedSymbols":"${AllowedSymbols}","BlockedSymbols":"${BlockedSymbols}","AllowedAssetClasses":"${AllowedAssetClasses}"}
+        {"ALPACA_API_KEY":"${AlpacaApiKey}","ALPACA_SECRET_KEY":"${AlpacaSecretKey}","ALPACA_PAPER_TRADE":"${AlpacaPaperTrade}","PROVOST_TOKEN":"${ProvostToken}","S3_BUCKET":"${LogsBucket}","AWS_REGION":"${AWS::Region}","MaxTradeNotional":${MaxTradeNotional},"MaxSharesPerTrade":${MaxSharesPerTrade},"RateLimitRPM":${RateLimitRPM},"EnableAllowlist":"${EnableAllowlist}","AllowedSymbols":"${AllowedSymbols}","BlockedSymbols":"${BlockedSymbols}","AllowedAssetClasses":"${AllowedAssetClasses}","ForbiddenTools":"${ForbiddenTools}","MaxReplaceNotional":${MaxReplaceNotional},"PreventMarketOrderUpgrade":"${PreventMarketOrderUpgrade}","MaxCloseNotional":${MaxCloseNotional},"AllowedCloseTickers":"${AllowedCloseTickers}","LogDNERequests":"${LogDNERequests}"}
       Tags:
         - Key: Project
           Value: agent-provost

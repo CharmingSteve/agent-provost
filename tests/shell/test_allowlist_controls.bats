@@ -2,7 +2,7 @@
 
 setup() {
   ROOT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
-  CF_FILE="$ROOT_DIR/cloudformation/alpaca-provost-cf.yml"
+  CF_FILE="$ROOT_DIR/cloudformation/alpaca-provost-cf-v0.2.7.yml"
   RULES_FILE="$ROOT_DIR/rules.json"
   SYNC_FILE="$ROOT_DIR/scripts/sync_state.sh"
 }

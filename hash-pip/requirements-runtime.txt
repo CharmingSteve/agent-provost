@@ -44,10 +44,11 @@ alpaca-mcp-server==2.0.1 \
     --hash=sha256:d86d6a45ab58ce6b875ad79076183827963b7d802c5beeb69e1b54e8aae29278
 
 # Package: setuptools
-# Version represented by these hashes: 82.0.1
-setuptools==82.0.1 \
-    --hash=sha256:a59e362652f08dcd477c78bb6e7bd9d80a7995bc73ce773050228a348ce2e5bb \
-    --hash=sha256:7d872682c5d01cfde07da7bccc7b65469d3dca203318515ada1de5eda35efbf9
+# Version represented by these hashes: 83.0.0
+# Upgraded from 82.0.1; fixes PYSEC-2026-3447
+setuptools==83.0.0 \
+    --hash=sha256:29b23c360f22f414dc7336bb39178cc7bcbf6021ed2733cde173f09dba19abb3 \
+    --hash=sha256:025bccbbf0fa05b6192bc64ae1e7b16e001fd6d6d4d5de03c97b1c1ade523bef
 
 # Package: wheel
 # Version represented by these hashes: 0.46.3

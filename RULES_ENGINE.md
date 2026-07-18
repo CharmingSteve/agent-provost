@@ -172,24 +172,6 @@ Blocks any request whose `ticker` or equivalent symbol field matches a symbol in
 |---|---|---|
 | `tickers` | string[] | List of exact ticker symbols to reject |
 
-#### `blocked_tool_names`
-
-Blocks requests whose explicit MCP tool name is in `params.tools`.
-
-```json
-"blocked_tool_names": {
-  "enabled": false,
-  "description": "Block specific MCP tool names regardless of field variation in the arguments.",
-  "params": {
-    "tools": ["place_stock_order", "place_option_order", "place_crypto_order"]
-  }
-}
-```
-
-| Param | Type | Description |
-|---|---|---|
-| `tools` | string[] | Exact MCP tool names to reject |
-
 #### `restricted_ticker_tool_rules`
 
 Blocks requests that use a specific trade tool and a restricted ticker symbol, even when the symbol is provided via different field names.
