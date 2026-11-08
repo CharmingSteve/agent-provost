@@ -12,6 +12,14 @@ Stop your AI agent from going rogue with programmable risk guardrails and a tamp
 
 **👉 Launch on AWS Marketplace:** [Agent Provost AMI](https://aws.amazon.com/marketplace/pp/prodview-ouyql6wbwo6yg)
 
+<p align="center">
+  <a href="https://www.youtube.com/shorts/rucfPtORqu8">
+    <img src="https://img.youtube.com/vi/rucfPtORqu8/hqdefault.jpg" alt="Watch the Agent Provost demo on YouTube" width="360" />
+  </a>
+  <br />
+  <sub>▶️ Click to watch the demo on YouTube</sub>
+</p>
+
 ---
 
 ## Quickstart (TLDR)
