@@ -10,6 +10,10 @@
 
 Stop your AI agent from going rogue with programmable risk guardrails and a tamper-proof audit trail.
 
+## The Problem
+
+AI agents that place trades can submit orders no one authorized, and some of those orders cannot be undone once they execute. Relying on the model to refuse risky trades is not a reliable control: a model that is confused, manipulated, or simply wrong can still make the call. Agent Provost moves the decision out of the model and into a deterministic policy layer that sits between the agent and the broker, and it records every decision.
+
 **👉 Launch on AWS Marketplace:** [Agent Provost AMI](https://aws.amazon.com/marketplace/pp/prodview-ouyql6wbwo6yg)
 
 <p align="center">
@@ -298,6 +302,49 @@ We are expanding the safety suite. What other controls should we add?
 - [ ] Time-of-day trading windows?
 
 **[Suggest a new safety control in the Issues section!](https://github.com/CharmingSteve/agent-provost/issues)**
+
+---
+
+## Safety Approach: Preventing Unauthorized and Irreversible Actions
+
+Agent Provost is a policy enforcement point, not a prompt-level instruction. Traffic from the LLM client to the MCP server, and from the MCP server to Alpaca, both pass through the proxy, so the agent has no direct path to the broker that skips the check.
+
+How it works:
+
+- **Mediation, not advice.** Requests on both boundaries (port 8000 for llm-to-mcp, port 8081 for mcp-to-api) are evaluated before they are forwarded. Blocked requests return `403 Forbidden` with a `PROVOST_INTERVENTION` reason.
+- **Irreversible-action guards (trading).** Order quantity cap (`max_trade_size`), per-order notional cap (`max_trade_notional`), rolling cumulative notional limit, per-symbol order cooldown, replacement-order notional cap, `prevent_market_order_upgrade`, and close-position notional cap and ticker allowlist all run before an order reaches Alpaca.
+- **Hard-blocked endpoints.** `forbidden_tools` blocks withdrawals, transfers, journals, bulk cancel and liquidate, account configuration changes, rebalancing, and options exercise, matched by method and path template.
+- **Fail-safe handling.** Notional orders without a valid `limit_price` are blocked. If `rules.json` is missing or unparseable, an error is logged and the previous rules stay active.
+- **Upstream protection.** After an upstream `429`, inbound traffic is blocked for 60 seconds. Traffic is also blocked with `429` when upstream rate-limit quota falls below the configured threshold.
+- **Deterministic and inspectable.** Rules are plain JSON in [`rules.json`](rules.json), evaluated in Lua by `lua/rules_engine.lua`. The same request produces the same decision, and each decision is written to the audit ledger.
+- **Hot reload.** Rule changes take effect within 10 seconds, without an nginx reload.
+
+### Supporting Evidence
+
+- **Demo:** the YouTube demo video linked at the top of this README.
+- **AWS Marketplace listing:** [Agent Provost AMI](https://aws.amazon.com/marketplace/pp/prodview-ouyql6wbwo6yg).
+- **Automated tests:** Lua specs in `tests/lua/` (rules engine, adversarial rule inputs, rule loader, circuit breaker, rate limit) and Bats specs in `tests/shell/` (allowlist controls, adversarial inputs, token authentication, log privacy). Run them with:
+  ```sh
+  busted tests/lua/
+  bats tests/shell/
+  ```
+- **Forbidden-endpoint checks:** `tests/test_forbidden_endpoints.sh` against the templates in `tests/forbidden_endpoints.txt`.
+- **Integration checks:** `sh verify_proxy_routing.sh` against a running stack verifies the proxy routing and confirms that audit evidence reaches S3 or the local durable buffer.
+- **CI:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the test suites, validates access and error log records against [`schemas/`](schemas/), and runs security scans.
+- **Documentation:** [`RULES_ENGINE.md`](RULES_ENGINE.md) for every rule and how to add one, and [`rules.json`](rules.json) for the live policy.
+
+### Limitations
+
+Known weaknesses and areas for improvement:
+
+- **Policy is only as good as the rules.** Agent Provost enforces the rules written in `rules.json`. It does not detect novel attacks or judge whether an allowed trade is wise, so policy review remains a human task.
+- **Ticker allowlist is off by default.** `allowed_tickers` is disabled, so symbols are restricted by the blocklists and cap rules unless an operator enables an explicit allowlist.
+- **Unparseable requests pass through the rules engine.** A request body that cannot be decoded as a `tools/call` with arguments is not evaluated by the trade rules (`lua/rules_engine.lua` passes it through).
+- **Scope of enforcement.** Only traffic through the proxy is governed. Clients or MCP servers that connect to Alpaca directly are not covered, and outbound routing covers only the configured prefixes (`trading`, `data`, `broker`).
+- **Shared token and self-declared identity.** All clients share one `PROVOST_TOKEN`. The `PROVOST_USER` and `PROVOST_MACHINE` values are supplied by the client and recorded as given, so they identify the caller but do not authenticate it.
+- **Runtime patching.** `entrypoint.sh` patches the `alpaca-mcp-server` source at runtime, so the `alpaca-mcp` container remains writable. The Security Decision Record in this README documents this exception and its planned removal. The target date in that record has passed, and the exception is still in place.
+- **Runtime state.** The upstream 429 cooldown is kept in nginx shared memory (`rate_limit` dict) and resets when the container restarts.
+- **No independent certification.** The regulatory alignment table describes architectural intent. This project has not been independently audited or certified.
 
 ---
 
