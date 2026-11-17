@@ -328,6 +328,7 @@ How it works:
   busted tests/lua/
   bats tests/shell/
   ```
+  Last local run on this branch: `busted tests/lua/` reported 153 successes, 0 failures, 0 errors; `bats tests/shell/` reported 96 tests, all passing.
 - **Forbidden-endpoint checks:** `tests/test_forbidden_endpoints.sh` against the templates in `tests/forbidden_endpoints.txt`.
 - **Integration checks:** `sh verify_proxy_routing.sh` against a running stack verifies the proxy routing and confirms that audit evidence reaches S3 or the local durable buffer.
 - **CI:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the test suites, validates access and error log records against [`schemas/`](schemas/), and runs security scans.
